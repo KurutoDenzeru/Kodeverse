@@ -6,11 +6,12 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { toast } from "@/components/ui/toast";
-import { diffSnapshots, snapshotOf } from "@/lib/changelog";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { buildLog, diffSnapshots, snapshotOf } from "@/lib/changelog";
 import { runRefresh } from "@/lib/refresh";
 import type { PlanData } from "@/lib/types";
 
-import { ChangelogSection } from "./changelog-section";
+import { ChangelogDialog } from "./changelog-dialog";
 import { Hero } from "./hero";
 import { LimitsSection } from "./limits-section";
 import { MethodSection } from "./method-section";
@@ -18,6 +19,7 @@ import { ModelsSection } from "./models-table";
 import { PlanCards } from "./plan-cards";
 import { SiteFooter } from "./site-footer";
 import { SiteNav } from "./site-nav";
+import { useHistory } from "./use-history";
 import { initialView, type ViewState } from "./view";
 
 /** What a refresh changed, said in one line: models read, figures moved,
@@ -44,6 +46,15 @@ export function CompareApp({ initialData }: { initialData: PlanData }) {
   const [selected, setSelected] = useState<string>(() => initialData.plans[0]?.id ?? "");
   const [view, setView] = useState<ViewState>(initialView);
   const [refreshing, setRefreshing] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
+
+  // The dialog's entry count, so the nav icon can say what is inside it. The
+  // same log the dialog renders, read here once for the badge.
+  const history = useHistory(data);
+  const changeCount = useMemo(() => {
+    const labels = Object.fromEntries(data.plans.map((p) => [p.id, p.label]));
+    return buildLog(history, snapshotOf(data), labels).length;
+  }, [history, data]);
 
   const patch = useCallback((p: Partial<ViewState>) => {
     setView((v) => ({ ...v, ...p }));
@@ -114,17 +125,30 @@ export function CompareApp({ initialData }: { initialData: PlanData }) {
   }, [data, knownCounts]);
 
   return (
-    <>
-      <SiteNav refreshing={refreshing} onRefresh={onRefresh} />
+    // One provider inside the island, so every hover label on the page (the
+    // nav's change log, the method's clock, the bars' legend) shares it.
+    <TooltipProvider>
+      <SiteNav
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        onOpenChanges={() => setChangesOpen(true)}
+        changesCount={changeCount}
+      />
       <main id="top" className="overflow-x-clip">
         <Hero />
         <PlanCards data={data} selected={selected} onSelect={setSelected} />
         <LimitsSection data={data} view={view} patch={patch} />
         <ModelsSection data={data} view={view} patch={patch} selected={selected} />
-        <ChangelogSection data={data} view={view} patch={patch} />
         <MethodSection data={data} view={view} patch={patch} selected={selected} />
       </main>
       <SiteFooter data={data} />
-    </>
+      <ChangelogDialog
+        data={data}
+        view={view}
+        patch={patch}
+        open={changesOpen}
+        onOpenChange={setChangesOpen}
+      />
+    </TooltipProvider>
   );
 }

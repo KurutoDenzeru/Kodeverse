@@ -2,27 +2,41 @@
 // centre-left, the machine controls right. Each link carries a lucide glyph so
 // the row reads as icons first and words second, and the labels step aside
 // before the row ever needs a hamburger. Refresh is one click and reports
-// through a toast, so there is no panel to open and nothing to dismiss.
+// through a toast, so there is no panel to open and nothing to dismiss. The
+// change log is a dialog, not a section: the reader opens it when they wonder
+// what moved, and it never takes a place in the page's argument.
 
 import { Gauge, History, Moon, RefreshCw, Scale, Sigma, Sun, Table2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { pad2 } from "@/lib/format";
 import { zoneLabel } from "@/lib/zone";
 
+// The change log left this row when it became a dialog, so the anchors name
+// the four sections that remain.
 const LINKS: { href: string; label: string; Icon: typeof Scale }[] = [
   { href: "#plans", label: "Plans", Icon: Scale },
   { href: "#limits", label: "Limits", Icon: Gauge },
   { href: "#models", label: "Models", Icon: Table2 },
-  { href: "#changes", label: "Changes", Icon: History },
   { href: "#method", label: "Method", Icon: Sigma },
 ];
 
 const THEME_KEY = "plan-compare.theme";
 
-export function SiteNav({ refreshing, onRefresh }: { refreshing: boolean; onRefresh: () => void }) {
+export function SiteNav({
+  refreshing,
+  onRefresh,
+  onOpenChanges,
+  changesCount,
+}: {
+  refreshing: boolean;
+  onRefresh: () => void;
+  onOpenChanges: () => void;
+  changesCount: number;
+}) {
   const [dark, setDark] = useState(
     () => typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
   );
@@ -113,6 +127,38 @@ export function SiteNav({ refreshing, onRefresh }: { refreshing: boolean; onRefr
             <Sun className="dark:hidden" aria-hidden />
             <Moon className="hidden dark:block" aria-hidden />
           </Button>
+          {/* What changed: an icon, not a nav item. The log is history, not
+              part of the argument, so it lives behind a glyph with a hover
+              label rather than holding a place in the row. */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  id="changes-trigger"
+                  variant="outline"
+                  size="icon"
+                  className="relative rounded-full"
+                  onClick={onOpenChanges}
+                />
+              }
+            >
+              <History className="size-4" aria-hidden />
+              <span className="sr-only">
+                What changed{changesCount > 0 ? `, ${changesCount} entries` : ""}
+              </span>
+              {changesCount > 0 && (
+                <span
+                  className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-go"
+                  aria-hidden
+                />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>
+              {changesCount > 0
+                ? `What changed: ${changesCount} ${changesCount === 1 ? "entry" : "entries"} in the last 30 days`
+                : "What changed: every refresh, dated"}
+            </TooltipContent>
+          </Tooltip>
           <Button
             id="refresh-trigger"
             onClick={onRefresh}

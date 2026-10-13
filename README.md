@@ -94,7 +94,8 @@ flowchart LR
   figures on screen stay the ones the last build read.
 - Every refresh is audit-logged. The page keeps one snapshot per day for thirty
   days in the browser and diffs the live figures against the most recent day.
-  A refresh reports what moved: which models changed, joined, or left.
+  The log is a dialog behind a nav icon, not a section: a reader opens it when
+  they wonder what moved, and it never takes a place in the page's argument.
 
 ## Page metadata and SEO
 

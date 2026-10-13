@@ -1,28 +1,23 @@
 // Limits, the way the vendor pages present it: one row per model, two stacked
 // full-width bars for the two plans, the request estimate and the monthly
-// usage as two stacked figures at the right. Lightest usage sits at the top,
-// the free models at the bottom, because the free tier is the most generous
-// allowance there is and it reads as the end of the scale rather than the
-// start of it.
+// usage as two stacked figures at the right. The most generous rows come
+// first, because those are the ones worth seeing before the list is expanded,
+// and the least generous sink to the bottom where the expander finds them.
 //
 // The bars share one logarithmic scale across the whole catalogue, the way the
 // reference list does: a linear scale would draw every capped model as a
-// hairline next to the ones that are free. A model neither plan carries shows
-// a gap, never a zero-width bar that would read as the smallest allowance.
+// hairline next to the ones that are free.
+//
+// A grid, not a table. The rows are a comparison, not a data set: no row
+// headers, no sortable columns, no cell borders. One hairline above the header
+// and one above the footer are the only rules, and the space between rows does
+// the separating.
 
 import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { comparable, ranks, reqOf } from "@/lib/compare";
 import { money, reqText } from "@/lib/format";
 import type { ModelRow, PlanData } from "@/lib/types";
@@ -49,12 +44,12 @@ function Bar({ cls, width }: { cls: "go" | "goat"; width: number }) {
 
 /** A stacked figure column: one line per plan, in the plan's order, so the two
  *  numbers on a row always belong to the same plan as the two bars. */
-function Figures({ items, dash }: { items: { id: string; text: string | null }[]; dash: string }) {
+function Figures({ items }: { items: { id: string; text: string }[] }) {
   return (
     <>
       {items.map((it) => (
         <span key={it.id} className="fig block text-[12.5px] leading-relaxed tabular-nums">
-          {it.text ?? dash}
+          {it.text}
         </span>
       ))}
     </>
@@ -141,113 +136,99 @@ export function LimitsSection({
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted hover:bg-muted">
-                <TableHead scope="col">Model</TableHead>
-                {/* The bar column carries a name for a screen reader rather
-                    than a visible one: the two stacked bars are one measure
-                    per plan, and the figures beside them say which is which. */}
-                <TableHead scope="col" className="min-w-[240px]">
-                  <span className="sr-only">Estimated requests per 5 hours, by plan</span>
-                </TableHead>
-                <TableHead scope="col" className="text-right">
-                  Est. requests / 5h
-                </TableHead>
-                <TableHead scope="col" className="text-right">
-                  Monthly usage
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {shown.map(({ m }) => (
-                // No rule between rows. The reference list separates its rows
-                // with space alone, and in a column of bars a separator reads
-                // as a third bar rather than as structure. The important flag
-                // is needed because the Table element paints its own rule on
-                // every row, and that rule outranks a plain utility.
-                <TableRow key={m.key} className="border-b-0! hover:bg-muted/40">
-                  <TableCell className="align-middle font-medium whitespace-normal">
-                    {/* The name alone. Both plans publish a figure for every
-                        row here, so there is no side note to write. */}
-                    {m.name}
-                  </TableCell>
-                  <TableCell className="align-middle">
-                    <div className="flex flex-col gap-1">
-                      {ranking.map((p) => {
-                        // One bar per plan. The width is the full scale for a
-                        // free model and the log position of its request
-                        // estimate otherwise.
-                        const v = m.plans[p.id]!.monthly;
-                        return (
-                          <Bar
-                            key={p.id}
-                            cls={p.cls === "goat" ? "goat" : "go"}
-                            width={
-                              v === -1
-                                ? 100
-                                : scale.width(Math.max(reqOf(m, p.id, "five") ?? 0, 0.0001))
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right align-middle">
+          {/* Column labels, once. They are labels, not a header row: no rules,
+              no alignment contract, and the bars carry the plan identity. */}
+          <div className="hidden grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto] items-center gap-x-6 border-b border-border px-5 py-2.5 text-xs text-muted-foreground md:grid">
+            <span>Model</span>
+            <span className="flex items-center gap-1.5">
+              Requests per 5 hours
+              <Tooltip>
+                <TooltipTrigger
+                  render={<span className="fig cursor-default text-muted-foreground/70" />}
+                >
+                  log
+                </TooltipTrigger>
+                <TooltipContent>
+                  Bar length is the request estimate on a logarithmic scale, so a capped model and a
+                  free one are both visible.
+                </TooltipContent>
+              </Tooltip>
+            </span>
+            <span className="text-right">Est. req / 5h</span>
+            <span className="text-right">Monthly usage</span>
+          </div>
+
+          <ul className="m-0 list-none p-0">
+            {shown.map(({ m }) => (
+              <li key={m.key} className="px-5 py-3.5">
+                {/* One row: the name, then the bars, then the two figure
+                    columns. Below md the row becomes two lines, the bars
+                    taking the full width under the name. */}
+                <div className="grid grid-cols-1 items-center gap-x-6 gap-y-2.5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto]">
+                  <span className="font-medium">{m.name}</span>
+                  <span className="flex flex-col gap-1">
+                    {ranking.map((p) => {
+                      // One bar per plan. The width is the full scale for a
+                      // free model and the log position of its request
+                      // estimate otherwise.
+                      const v = m.plans[p.id]!.monthly;
+                      return (
+                        <Bar
+                          key={p.id}
+                          cls={p.cls === "goat" ? "goat" : "go"}
+                          width={
+                            v === -1
+                              ? 100
+                              : scale.width(Math.max(reqOf(m, p.id, "five") ?? 0, 0.0001))
+                          }
+                        />
+                      );
+                    })}
+                  </span>
+                  <span className="text-right">
                     <Figures
                       items={ranking.map((p) => {
                         const v = reqOf(m, p.id, "five");
                         return {
                           id: p.id,
-                          text: v == null ? null : v === -1 ? "\u221e" : reqText(v),
+                          text: v == null ? "-" : v === -1 ? "\u221e" : reqText(v),
                         };
                       })}
-                      dash="-"
                     />
-                  </TableCell>
-                  <TableCell className="text-right align-middle">
+                  </span>
+                  <span className="text-right">
                     <Figures
                       items={ranking.map((p) => {
                         const v = m.plans[p.id]!.monthly;
-                        return {
-                          id: p.id,
-                          text: v === -1 ? "\u221e" : money(v),
-                        };
+                        return { id: p.id, text: v === -1 ? "\u221e" : money(v) };
                       })}
-                      dash="-"
                     />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            {/* The scale sits in the bar column's own row, so the ticks line up
-                with the bars above them. Hidden where the column is too narrow
-                to hold them. */}
-            <TableFooter className="hidden md:table-row-group">
-              <tr className="hover:bg-transparent">
-                <td>
-                  <span className="sr-only">Scale</span>
-                </td>
-                <td className="relative px-4 pt-2 pb-1">
-                  {scale.ticks.map((t) => (
-                    <span
-                      key={t.label}
-                      className="fig absolute top-2 -translate-x-1/2 text-[10px] text-muted-foreground/70"
-                      style={{ left: t.at + "%" }}
-                    >
-                      {t.label}
-                    </span>
-                  ))}
-                </td>
-                <td>
-                  <span className="sr-only">Scale</span>
-                </td>
-                <td>
-                  <span className="sr-only">Scale</span>
-                </td>
-              </tr>
-            </TableFooter>
-          </Table>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* The scale sits in the bar column's own line, so the ticks line up
+              with the bars above them. */}
+          <div className="hidden border-t border-border px-5 py-2.5 md:block">
+            <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto] gap-x-6">
+              <span />
+              <span className="relative block h-4">
+                {scale.ticks.map((t) => (
+                  <span
+                    key={t.label}
+                    className="fig absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground/70"
+                    style={{ left: t.at + "%" }}
+                  >
+                    {t.label}
+                  </span>
+                ))}
+              </span>
+              <span />
+              <span />
+            </div>
+          </div>
 
           {rows.length > LIM_SIZE && (
             <div className="border-t border-border px-5 py-3">

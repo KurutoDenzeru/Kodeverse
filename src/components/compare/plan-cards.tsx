@@ -1,10 +1,15 @@
-// The read: the verdict strip over one card per plan. The strip states the
-// best case across every plan, which is the figure a reader arriving here came
-// for. Each card states that plan's own cap rule and the figures that follow
-// from it, so no number is printed twice and a plan that publishes nothing
-// says so on every figure instead of printing a zero.
+// The read: a three-window stat row over one card per plan.
+//
+// The row is the whole comparison in one glance: what each plan allows in five
+// hours, in a week, and in a month, and who wins how many of the comparable
+// models in that window. A reader asking "same price, same allowance?" gets the
+// answer before any scrolling, and the row earns its place by covering all
+// three windows rather than repeating the monthly figure alone.
+//
+// Plain numbers in divided columns, not cards: the figures are the content, and
+// a card box around each one would add three containers and no information.
 
-import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { comparable, tally } from "@/lib/compare";
 import { money } from "@/lib/format";
 import type { PlanData, PlanMeta } from "@/lib/types";
@@ -75,6 +80,29 @@ const capFigures = (p: PlanMeta, data: PlanData): { five: number | null; week: n
   return { five: top * caps.fiveHourPct, week: top * caps.weekPct };
 };
 
+/** The three windows, each with the rule a plan states and the figure it
+ *  produces on its best model. The windows are the question a reader arrives
+ *  with, so they are read off the same caps the cards state. */
+const WINDOWS: { field: "five" | "week" | "monthly"; label: string; note: string }[] = [
+  { field: "five", label: "Per 5 hours", note: "the cap you actually meet first" },
+  { field: "week", label: "Per week", note: "the rolling weekly cap" },
+  { field: "monthly", label: "Per month", note: "the monthly credit" },
+];
+
+/** What one plan allows in one window, on its best model. */
+const windowFigure = (
+  p: PlanMeta,
+  data: PlanData,
+  field: "five" | "week" | "monthly",
+): number | null => {
+  const caps = data.caps[p.id];
+  if (caps.published === false) return null;
+  if (field === "monthly") return peak(p.id, data) || null;
+  if ("fiveHour" in caps) return field === "five" ? caps.fiveHour : caps.week;
+  const top = peak(p.id, data);
+  return top * (field === "five" ? caps.fiveHourPct : caps.weekPct);
+};
+
 export function PlanCards({
   data,
   selected,
@@ -84,86 +112,89 @@ export function PlanCards({
   selected: string;
   onSelect: (id: string) => void;
 }) {
-  // Which plans can be ranked is decided by the data, not by their ids, so a
-  // fourth provider needs no change here.
   const ranked = data.plans
     .filter((p) => p.ranks !== false)
     .sort((a, b) => peak(b.id, data) / b.price - peak(a.id, data) / a.price);
   const unranked = data.plans.filter((p) => p.ranks === false);
   const shared = comparable(data).length;
-  const tM = tally("monthly", data);
+  // One tally per window, because the winner is not the same plan in all three.
+  const tallies = {
+    five: tally("five", data),
+    week: tally("week", data),
+    monthly: tally("monthly", data),
+  };
 
   return (
-    <section id="read" className="px-5 py-[clamp(40px,6vw,72px)] md:px-12">
-      <div className="mx-auto flex max-w-[1360px] flex-col gap-3">
-        <Card className="bg-secondary">
-          <CardContent className="grid gap-4 p-[clamp(22px,3vw,30px)] sm:grid-cols-[minmax(200px,auto)_minmax(0,1fr)] sm:gap-11">
-            <div>
-              <p className="fig m-0 text-[clamp(40px,5.6vw,66px)] font-bold leading-none tracking-[-0.05em]">
-                {ranked.length
-                  ? "x" + (peak(ranked[0].id, data) / ranked[0].price).toFixed(1)
-                  : "-"}
-              </p>
-              <p className="mt-3 max-w-[36ch] font-mono text-[11px] uppercase leading-relaxed tracking-[0.1em] text-muted-foreground">
-                {ranked.length
-                  ? "Best published monthly allowance, best model"
-                  : "No plan publishes a monthly allowance"}
-              </p>
-            </div>
-            <div>
-              <p className="m-0 max-w-[70ch] text-[15px] font-light leading-relaxed text-muted-foreground">
-                {ranked.length > 0 && (
-                  <>
-                    <b className="font-semibold text-foreground">{ranked[0].label}</b> grants the
-                    most credit on any model it publishes.{" "}
-                  </>
-                )}
-                {ranked.length > 1 && (
-                  <>
-                    <b className="font-semibold text-foreground">{ranked[1].label}</b> follows at x
-                    {(peak(ranked[1].id, data) / ranked[1].price).toFixed(1)}.{" "}
-                  </>
-                )}
-                That is the best case. The five-hour cap is the number you actually meet.
-                {unranked.map((p) => (
-                  <span key={p.id}>
-                    {" "}
-                    <b className="font-semibold text-foreground">{p.label}</b> publishes no
-                    allowance figure, so there is nothing to rank it on: its rates are the only
-                    honest comparison.
-                  </span>
-                ))}
-              </p>
-              <ul className="mt-[18px] flex list-none flex-wrap gap-x-[34px] gap-y-3 border-t border-border p-0 pt-[18px]">
-                {ranked.map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-baseline gap-2.5 font-mono text-xs text-muted-foreground"
+    <section id="read" className="px-5 pb-[clamp(40px,6vw,72px)] md:px-12">
+      <div className="mx-auto max-w-[1360px]">
+        {/* Three windows, one row. The plan figures sit under their own mark,
+            and the tally under the figures, so a column reads top to bottom as
+            what the plan allows and how often it leads. */}
+        <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
+          {WINDOWS.map(({ field, label, note }) => (
+            <div key={field} className="bg-card p-[clamp(20px,2.6vw,28px)]">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="m-0 text-sm font-semibold tracking-tight">{label}</h3>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="fig cursor-default text-[11px] text-muted-foreground" />
+                    }
                   >
-                    <b
-                      className={
-                        "fig text-[22px] font-bold tracking-[-0.03em] " +
-                        (p.cls === "goat" ? "text-goat" : "text-go")
-                      }
-                    >
-                      {tM[p.id] ?? 0}
-                    </b>
-                    {p.short} wins
-                  </li>
-                ))}
-                <li className="flex items-baseline gap-2.5 font-mono text-xs text-muted-foreground">
-                  <b className="fig text-[22px] font-bold tracking-[-0.03em]">{tM.tie ?? 0}</b>
-                  tied
-                </li>
-                <li className="self-end pb-0.5 text-muted-foreground/70">
-                  across {shared} models {ranked.length} plans publish an allowance for
-                </li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+                    {shared} models
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {note}, across the {shared} models both plans publish
+                  </TooltipContent>
+                </Tooltip>
+              </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+              <div className="mt-4 grid gap-3">
+                {ranked.map((p) => {
+                  const v = windowFigure(p, data, field);
+                  const wins = tallies[field][p.id] ?? 0;
+                  return (
+                    <div key={p.id} className="flex items-center gap-3">
+                      <BrandMark id={p.id as "opencode" | "commandcode"} small />
+                      <span className="fig text-[clamp(20px,2.2vw,26px)] font-bold leading-none tracking-[-0.03em]">
+                        {v == null ? (
+                          <span className="text-[0.7em] font-medium text-muted-foreground/70">
+                            not published
+                          </span>
+                        ) : (
+                          money(v)
+                        )}
+                      </span>
+                      <span className="fig ml-auto text-xs text-muted-foreground">
+                        wins {wins} of {shared}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="mb-0 mt-4 border-t border-border pt-3 text-[13px] font-light text-muted-foreground">
+                {tallies[field].tie
+                  ? `${tallies[field].tie} of ${shared} tie`
+                  : `no ties across ${shared} models`}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {unranked.length > 0 && (
+          <p className="mt-4 max-w-[76ch] text-sm font-light text-muted-foreground">
+            {unranked
+              .map(
+                (p) =>
+                  `${p.label} publishes no allowance figure, so there is nothing to rank it on`,
+              )
+              .join(". ")}
+            .
+          </p>
+        )}
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
           {data.plans.map((p) => {
             const rule = capRuleText(p, data);
             const figs = capFigures(p, data);

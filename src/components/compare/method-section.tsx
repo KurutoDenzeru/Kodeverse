@@ -2,7 +2,6 @@
 // arithmetic is worked out on a real model, and each card carries a figure
 // from this page's own data, so nothing here asserts something the reader
 // cannot check against the tables above.
-
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -15,14 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { comparable, priceSplit, ranks, tally } from "@/lib/compare";
 import { money, pad2 } from "@/lib/format";
 import type { ModelRow, PlanData, PlanSide } from "@/lib/types";
@@ -179,56 +171,66 @@ export function MethodSection({
               </h3>
             </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead scope="col">Plan</TableHead>
-                <TableHead scope="col">Monthly</TableHead>
-                <TableHead scope="col">Per 5 hours</TableHead>
-                <TableHead scope="col">Per week</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.plans.map((p) => {
-                const v = pick.plans[p.id];
-                const isAbout = p.id === about.id;
-                return (
-                  <TableRow key={p.id} className={isAbout ? "bg-go/[0.06]" : undefined}>
-                    <TableCell className="font-semibold">
-                      <span
-                        className={
-                          isAbout ? (p.cls === "goat" ? "text-goat" : "text-go") : undefined
-                        }
-                      >
-                        {p.label}
-                      </span>
-                    </TableCell>
+
+          {/* One panel per plan, not a table. The plans are the two sides of
+              the comparison, and a panel lets each side state its three
+              figures at size; a table would put the plan names in a narrow
+              first column and squeeze the numbers that matter. */}
+          <div className="grid gap-px bg-border md:grid-cols-2">
+            {data.plans.map((p) => {
+              const v = pick.plans[p.id];
+              const isAbout = p.id === about.id;
+              return (
+                <div
+                  key={p.id}
+                  className={
+                    "bg-card px-6 py-5 " +
+                    (isAbout ? (p.cls === "goat" ? "bg-goat/[0.06]" : "bg-go/[0.06]") : "")
+                  }
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BrandMark id={p.id as "opencode" | "commandcode"} small />
+                    <span
+                      className={
+                        "text-sm font-semibold " +
+                        (isAbout ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
+                      }
+                    >
+                      {p.label}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-4">
                     {(["monthly", "five", "week"] as const).map((k) => {
                       const val = v ? v[k] : null;
                       const best = val != null && isBest(k, val);
                       return (
-                        <TableCell
-                          key={k}
-                          className={
-                            "fig text-[clamp(19px,2vw,26px)] font-bold tracking-[-0.03em] " +
-                            (best ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
-                          }
-                        >
-                          {val == null ? (
-                            <span className="text-[0.7em] font-medium text-muted-foreground/70">
-                              not published
-                            </span>
-                          ) : (
-                            money(val)
-                          )}
-                        </TableCell>
+                        <div key={k}>
+                          <p className="mb-1.5 font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
+                            {{ monthly: "Monthly", five: "Per 5 hours", week: "Per week" }[k]}
+                          </p>
+                          <p
+                            className={
+                              "fig m-0 text-[clamp(19px,2vw,26px)] font-bold leading-none tracking-[-0.03em] " +
+                              (best ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
+                            }
+                          >
+                            {val == null ? (
+                              <span className="text-[0.7em] font-medium text-muted-foreground/70">
+                                not published
+                              </span>
+                            ) : (
+                              money(val)
+                            )}
+                          </p>
+                        </div>
                       );
                     })}
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           <p className="m-0 flex items-start gap-2.5 border-t border-border px-6 py-5 text-base font-light text-muted-foreground">
             <Info className="mt-1.5 size-4 shrink-0 text-muted-foreground/70" aria-hidden />
             {ranking.map((p) => p.label + " " + ruleOf(p, data)).join(". ") +
@@ -305,7 +307,23 @@ export function MethodSection({
                 model cost. Free models keep working.
               </p>
               <div className="mt-auto border-t border-border pt-3.5 font-mono text-xs leading-relaxed text-muted-foreground">
-                <div>DeepSeek peak pricing, UTC</div>
+                <div className="flex items-center gap-1.5">
+                  DeepSeek peak pricing, UTC
+                  {/* What the strip shows and which clock it reads: the peak
+                      windows are quoted in UTC, and the marker is the reader's
+                      own hour, so the two never disagree about which window is
+                      which. */}
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={<Info className="size-3.5 cursor-default text-muted-foreground/70" />}
+                    />
+                    <TooltipContent>
+                      DeepSeek prices peak between 01:00 and 04:00 UTC and again between 06:00 and
+                      10:00 UTC, on weekdays. The marker is your local hour, shown next to the UTC
+                      one.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <div className="mt-3 flex gap-0.5 rounded-lg border border-border px-1 pb-1 pt-4">
                   {Array.from({ length: 24 }, (_, h) => (
                     <i
@@ -358,12 +376,23 @@ export function MethodSection({
                       three figures the server cannot know. Each sits in its own
                       flagged span so the structure is identical on both sides
                       and only the text moves. */}
-                  <b
-                    className="flex items-center gap-1 font-semibold text-foreground"
-                    suppressHydrationWarning
-                  >
-                    {pad2(uh)}:{pad2(now.getUTCMinutes())} UTC
-                  </b>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <b
+                          className="flex cursor-default items-center gap-1 font-semibold text-foreground"
+                          suppressHydrationWarning
+                        />
+                      }
+                    >
+                      {pad2(uh)}:{pad2(now.getUTCMinutes())} UTC
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Your local time is {pad2(now.getHours() % 12 || 12)}:{pad2(now.getMinutes())}{" "}
+                      {now.getHours() < 12 ? "AM" : "PM"} in {zoneCity()}. The windows above are
+                      UTC, so your hour marks the same strip.
+                    </TooltipContent>
+                  </Tooltip>
                   <span suppressHydrationWarning>
                     {", " +
                       pad2(now.getHours() % 12 || 12) +

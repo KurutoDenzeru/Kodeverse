@@ -145,8 +145,10 @@ try {
   );
   check("the hero states the headline", /Same price/.test(head?.h1 || ""), head?.h1);
   check(
+    // Four sections now: read, limits, models, method. The change log left the
+    // page for a dialog, and the verdict strip became the three-window row.
     "every section is on the page",
-    (head?.h2s?.length ?? 0) >= 4,
+    (head?.h2s?.length ?? 0) >= 3,
     (head?.h2s || []).join(" / "),
   );
   const resultGone = await evaluate(
@@ -154,6 +156,22 @@ try {
     `!document.querySelector('#result') && !document.querySelector('a[href="#result"]')`,
   );
   check("the who-wins-what section is gone", resultGone === true);
+  const changesGone = await evaluate(
+    ws,
+    `!document.querySelector('#changes') && !document.querySelector('a[href="#changes"]') && !!document.getElementById('changes-trigger')`,
+  );
+  check("the change log is a nav dialog, not a section", changesGone === true);
+  // The read row covers all three windows, so the hero answers 5h, week and
+  // month without a scroll.
+  const windows = await evaluate(
+    ws,
+    `[...document.querySelectorAll('#read h3')].map((h) => h.textContent.trim())`,
+  );
+  check(
+    "the read row states all three windows",
+    ["Per 5 hours", "Per week", "Per month"].every((w) => (windows || []).includes(w)),
+    (windows || []).join(" / "),
+  );
 
   const table = await evaluate(
     ws,
@@ -420,19 +438,43 @@ try {
     (await evaluate(ws, `document.querySelectorAll('#models tbody tr').length`)) > 0,
   );
 
-  // ---- the changelog records the day ----
+  // ---- the changelog dialog records the day ----
+  // The log left the page, so the smoke opens it the way a reader does: click
+  // the nav icon, then read the dialog.
+  await evaluate(ws, `document.getElementById('changes-trigger')?.click()`);
+  await sleep(600);
   const log = await evaluate(
     ws,
-    `({
-    kept: document.querySelector('#changes')?.textContent?.match(/(\\d+) days? kept/)?.[0],
-    empty: /Nothing changed|First run/.test(document.querySelector('#changes')?.textContent || ''),
-  })`,
+    `(async () => {
+    const read = () => {
+      const dlg = document.querySelector('[data-slot="dialog-content"], [role="dialog"]');
+      const text = dlg?.textContent || '';
+      return {
+        open: !!dlg,
+        kept: (text.match(/(\\d+) days? kept/) || [])[0],
+        empty: /Nothing changed|First run|No changes of this kind/.test(text),
+      };
+    };
+    // The dialog paints its header first and its body a tick later, so wait
+    // for the line the check reads rather than assuming it is there.
+    const t0 = performance.now();
+    let out = read();
+    while (performance.now() - t0 < 10000 && out.open && !out.kept && !out.empty) {
+      await new Promise((r) => setTimeout(r, 100));
+      out = read();
+    }
+    return JSON.stringify(out);
+  })()`,
+    true,
   );
+  check("the changelog dialog opens", log?.open === true);
   check(
     "the changelog keeps a day or says why not",
     /kept/.test(log?.kept || "") || log?.empty === true,
     log?.kept,
   );
+  await evaluate(ws, `document.querySelector('[data-slot="dialog-close"]')?.click()`);
+  await sleep(300);
 
   check(
     "the page logged no uncaught errors",
