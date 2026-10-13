@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { comparable, priceSplit, ranks, tally } from "@/lib/compare";
+import { comparable, priceSplit, ranks, tally, TOLERANCE } from "@/lib/compare";
 import { money, pad2 } from "@/lib/format";
 import type { ModelRow, PlanData, PlanSide } from "@/lib/types";
 import { zoneCity } from "@/lib/zone";
@@ -252,26 +252,51 @@ export function MethodSection({
 
         <div className="grid gap-3.5 md:grid-cols-2">
           <Card>
-            <CardContent className="flex flex-col gap-3 p-5">
-              <h4 className="m-0 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
-                Price is not the lever
-              </h4>
-              <p className="m-0 text-[15px] font-light text-muted-foreground">
-                Most shared models cost the same on every plan that carries them. The comparison is
-                allowance, so the table shows the cheapest rate and puts the others underneath.
-              </p>
-              <div className="mt-auto border-t border-border pt-3.5 font-mono text-xs leading-relaxed text-muted-foreground">
-                {sample && (
-                  <>
-                    <div className="text-foreground">{sample.name}</div>
-                    <div>
-                      {money(sample.plans[about.id]!.input)} in&nbsp;&nbsp;
-                      {money(sample.plans[about.id]!.output)} out&nbsp;&nbsp;
-                      {money(sample.plans[about.id]!.cacheRead)} cache read
-                    </div>
-                  </>
-                )}
-                <div className="mt-3.5 flex flex-wrap gap-0.5 rounded-lg border border-border p-3.5">
+            <CardContent className="flex flex-col gap-4 p-5">
+              <div>
+                <h4 className="m-0 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
+                  Price is not the lever
+                </h4>
+                <p className="mt-2 mb-0 text-[15px] font-light text-muted-foreground">
+                  Most shared models cost the same on every plan that carries them. The comparison
+                  is allowance, so the table shows the cheapest rate and puts the others underneath.
+                </p>
+              </div>
+
+              {/* The sample, as a spec row: label above each figure, the way a
+                  rate should be read. The model it belongs to is named, so the
+                  figures are one real row rather than a rate with no subject. */}
+              {sample && (
+                <div className="rounded-lg border border-border p-4">
+                  <p className="m-0 text-sm font-medium">{sample.name}</p>
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    {(
+                      [
+                        ["In", sample.plans[about.id]!.input],
+                        ["Out", sample.plans[about.id]!.output],
+                        ["Cache read", sample.plans[about.id]!.cacheRead],
+                      ] as const
+                    ).map(([label, v]) => (
+                      <div key={label}>
+                        <p className="m-0 font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
+                          {label}
+                        </p>
+                        <p className="fig m-0 mt-1 text-lg font-bold leading-none tracking-[-0.02em]">
+                          {money(v)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="m-0 mt-3 text-[11px] font-light text-muted-foreground">
+                    per 1M tokens, on {about.label}
+                  </p>
+                </div>
+              )}
+
+              {/* One cell per shared model. The strip is the count a reader can
+                  see, and the legend under it says the same in words. */}
+              <div className="mt-auto">
+                <div className="flex flex-wrap gap-0.5 rounded-lg border border-border p-3.5">
                   {pool.map((m) => (
                     <i
                       key={m.key}
@@ -279,34 +304,92 @@ export function MethodSection({
                     />
                   ))}
                 </div>
-                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1.5">
-                    <i className="inline-block size-2.5 rounded-sm bg-tick" /> same on every plan
+                    <i className="inline-block size-2.5 rounded-sm bg-tick" />{" "}
+                    {pool.length - splitModels.length} same on every plan
                   </span>
                   <span className="flex items-center gap-1.5">
                     <i className="inline-block size-2.5 rounded-sm bg-bad" /> {splitModels.length}{" "}
                     differ
                   </span>
                 </div>
+
+                {/* Where they differ, per model: the field, and each plan's own
+                    figure in its colour. A comma list of names said that prices
+                    differ somewhere; this says where, and by how much. */}
                 {splitModels.length > 0 && (
-                  <div className="mt-2.5 font-sans text-muted-foreground">
-                    {splitModels.map((m, i) => (i ? ", " : "") + m.name).join("")}
-                  </div>
+                  <ul className="mt-3.5 list-none space-y-2.5 p-0">
+                    {splitModels.map((m) => {
+                      const differs = priceSplit(m, data);
+                      const rates = differs
+                        .map((f) => {
+                          const label = {
+                            input: "Input",
+                            output: "Output",
+                            cacheRead: "Cache read",
+                            cacheWrite: "Cache write",
+                          }[f];
+                          const perPlan = ranking.map((p) => ({
+                            p,
+                            v: m.plans[p.id]?.[f as "input"] ?? null,
+                          }));
+                          const values = perPlan
+                            .map((x) => x.v)
+                            .filter((v): v is number => v != null);
+                          if (values.length < 2) return null;
+                          const lo = Math.min(...values);
+                          const hi = Math.max(...values);
+                          if (hi <= lo * TOLERANCE) return null;
+                          return { f, label, perPlan };
+                        })
+                        .filter((x): x is NonNullable<typeof x> => x != null);
+                      if (!rates.length) return null;
+                      return (
+                        <li key={m.key}>
+                          <p className="m-0 text-sm font-medium">{m.name}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                            {rates.map((r) => (
+                              <span key={r.f} className="fig text-[12px] tabular-nums">
+                                {r.label}:{" "}
+                                {r.perPlan.map((x, i) => (
+                                  <span key={x.p.id}>
+                                    {i > 0 && <span className="text-muted-foreground"> vs </span>}
+                                    <b
+                                      className={
+                                        "font-semibold " +
+                                        (x.p.cls === "goat" ? "text-goat" : "text-go")
+                                      }
+                                    >
+                                      {money(x.v)}
+                                    </b>
+                                  </span>
+                                ))}
+                              </span>
+                            ))}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="flex flex-col gap-3 p-5">
-              <h4 className="m-0 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
-                After a cap
-              </h4>
-              <p className="m-0 text-[15px] font-light text-muted-foreground">
-                Go blocks unless balance fallback is on. Command Code bills pay-as-you-go credits at
-                model cost. Free models keep working.
-              </p>
-              <div className="mt-auto border-t border-border pt-3.5 font-mono text-xs leading-relaxed text-muted-foreground">
+            <CardContent className="flex flex-col gap-4 p-5">
+              <div>
+                <h4 className="m-0 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
+                  After a cap
+                </h4>
+                <p className="mt-2 mb-0 text-[15px] font-light text-muted-foreground">
+                  Go blocks unless balance fallback is on. Command Code bills pay-as-you-go credits
+                  at model cost. Free models keep working.
+                </p>
+              </div>
+
+              <div className="mt-auto font-mono text-xs leading-relaxed text-muted-foreground">
                 <div className="flex items-center gap-1.5">
                   DeepSeek peak pricing, UTC
                   {/* What the strip shows and which clock it reads: the peak
@@ -339,13 +422,7 @@ export function MethodSection({
                 </div>
                 <div className="mt-1.5 flex text-[10px] text-muted-foreground/70">
                   {["00", "06", "12", "18", "23"].map((t, i) => (
-                    <span
-                      key={t}
-                      className={
-                        "flex-1 " +
-                        (i === 1 || i === 2 ? "text-center" : i === 3 ? "text-center" : "")
-                      }
-                    >
+                    <span key={t} className={"flex-1 " + (i > 0 && i < 4 ? "text-center" : "")}>
                       {t}
                     </span>
                   ))}
@@ -369,7 +446,10 @@ export function MethodSection({
                     off peak
                   </span>
                 </div>
-                <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[12px]">
+                {/* The reader's own hour, as a footer band: the marker dot, the
+                    UTC figure with its hover label, the local time, and the
+                    state that holds until the next window edge. */}
+                <p className="mt-4 mb-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border px-3.5 py-2.5 font-mono text-[12px]">
                   <i className="inline-block size-2 rounded-full bg-bad" />
                   You are here:{" "}
                   {/* UTC now, the reader's own clock, and the peak state are the
