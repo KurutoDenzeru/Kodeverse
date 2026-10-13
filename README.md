@@ -1,10 +1,12 @@
 # Kodeverse: what a ten-dollar coding plan gets you
 
-A comparison of two coding subscriptions, OpenCode Go and Command Code GOAT,
-model by model. Both cost ten dollars a month. This document states where the
-two plans differ, how the figures were read, and how a reader can check them.
-The same content runs as a page: build it locally with `bun run build` and
-`bun run serve`, then open http://127.0.0.1:8787.
+OpenCode Go and Command Code GOAT compared model by model. Both cost ten
+dollars a month. Every figure is read from the vendor pages and stamped with
+the date it was read.
+
+The page is a static Astro build. The [method](#how-the-numbers-are-read), the
+[findings](#the-short-answer) and the engineering notes are below. To run it:
+`bun run build` then `bun run serve`, and open http://127.0.0.1:8787.
 
 ## The question
 
