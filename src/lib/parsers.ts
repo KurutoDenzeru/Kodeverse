@@ -201,5 +201,8 @@ export const normKey = (name: string): string => {
     .replace(/preview\s*/g, "") // "Hy4 preview" vs "Tencent Hy4 Preview"
     .replace(/v(?=\d)/g, "") // "MiMo V2.6 Flash" vs "MiMo 2.6 Flash"
     .replace(/[^a-z0-9]/g, "");
-  return s === "deepseekv4flashvisionexp" ? "deepseekv4flashvision" : s;
+  // No hand-written merges. Two models the vendors list separately, such as
+  // DeepSeek V4 Flash Vision and its Exp variant, keep separate keys: the
+  // normalisation strips formatting, never identity.
+  return s;
 };

@@ -17,6 +17,8 @@
     "fmt:check": "oxfmt . --check",
     "check": "bun run lint && bun run fmt:check",
     "typecheck": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "update": "bun scripts/update.ts",
     "serve": "node scripts/serve.mjs",
     "verify": "bun scripts/verify.ts",
@@ -52,6 +54,7 @@
     "@types/node": "^26.6.5",
     "oxfmt": "0.73.0",
     "oxlint": "1.88.0",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.4"
   }
 }

@@ -69,6 +69,7 @@ flowchart LR
   READER -->|"one snapshot per day"| LOG[("localStorage<br/>30-day changelog")]
   GATE["bun scripts/verify.ts<br/>fixtures, merge, caps, relay shape"] --> PARSE
   SMOKE["bun scripts/browser-smoke.mjs<br/>real browser, live refresh"] --> PAGE
+  UNIT["bun run test<br/>62 unit tests over the rules"] --> RULES["compare, parsers,<br/>merge, changelog, format"]
 ```
 
 ## Why a static page, a refresh button, and a scheduled read
@@ -123,14 +124,21 @@ party at read time.
 
 ## How correctness is checked
 
-- `bun run verify` is the gate. It checks the baked data, both parsers against
-  the saved vendor fixtures, the merge and its cap rules, the changelog diff,
-  and the shape of the relay. A truncated read must still parse whole.
+Three layers, from the cheapest to the closest to the reader.
+
+- `bun run test` is the unit gate. 62 tests over the pure library: the
+  comparison rules (who leads, by how much, what a tie is, which models are
+  comparable), the cell readers and both vendor parsers, the merge and its cap
+  rules, the refresh guard, the changelog diff and history window, and the
+  display formatting. Every expected value is a literal.
+- `bun run verify` is the data gate. It checks the baked data, both parsers
+  against the saved vendor fixtures, the merge and its cap rules, the changelog
+  diff, and the shape of the relay. A truncated read must still parse whole.
 - `bun run smoke` drives the built page in a real browser against the local
   server. It exercises the filter, both comparison dimensions, paging, the
   theme, and a live refresh, and it fails on any uncaught page error.
-- `.github/workflows/verify.yml` runs lint, format, types, build and the gate
-  on every push.
+- `.github/workflows/verify.yml` runs lint, format, types, tests, build and the
+  gate on every push.
 - Numbers are never invented. Every figure on the page comes from the vendor
   pages, and the read date sits in the footer.
 
@@ -168,6 +176,7 @@ bun run lint        # oxlint
 bun run fmt         # oxfmt
 bun run check       # lint + fmt:check
 bun run typecheck   # astro check
+bun run test        # vitest, the unit gate
 bun run verify      # the gate (needs a build in dist/)
 bun run smoke       # browser smoke against a running serve.mjs
 ```
