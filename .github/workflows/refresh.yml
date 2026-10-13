@@ -1,0 +1,38 @@
+name: refresh
+
+# Re-reads both vendor pages on a schedule and commits the new figures, so the
+# built page is never more than a few hours stale without anyone pressing
+# Refresh. The reader in the browser is the on-demand path; this is the one
+# that needs no relay at all, because the read happens on the runner.
+
+on:
+  schedule:
+    # Every six hours, at seventeen minutes past.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Read both vendor pages and write the figures
+        run: bun scripts/update.ts
+      - name: Commit if anything moved
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/plans.json
+          if git diff --staged --quiet; then
+            echo "No change since the last read."
+          else
+            git commit -m "data: re-read both vendor pages"
+            git push
+          fi

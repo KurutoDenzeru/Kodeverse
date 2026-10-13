@@ -1,0 +1,10 @@
+{
+  "name": "Kodeverse: what a ten-dollar coding plan gets you",
+  "short_name": "Kodeverse",
+  "description": "OpenCode Go and Command Code GOAT compared model by model.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0e0d",
+  "theme_color": "#0a0a0a",
+  "icons": [{ "src": "/brand.webp", "sizes": "512x512", "type": "image/webp", "purpose": "any" }]
+}

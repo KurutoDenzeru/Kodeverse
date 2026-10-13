@@ -1,0 +1,174 @@
+---
+import "@/styles/global.css"
+import { Toaster } from "@/components/ui/toast"
+import marks from "../components/compare/marks.svg?raw"
+import plansJson from "../data/plans.json"
+import type { PlanData } from "@/lib/types"
+
+// The JSON import arrives untyped, so it is read through the data model the
+// rest of the page uses.
+const plans = plansJson as PlanData
+
+// One place for the page's identity, so the head, the JSON-LD and the sitemap
+// cannot disagree about a title, a description or a date.
+const SITE = import.meta.env.SITE ?? ""
+const url = (path: string) => (SITE ? new URL(path, SITE).href : path)
+const canonical = url("/")
+const ogImage = url("/OpenGraph.webp")
+const title = "What a ten-dollar coding plan gets you"
+const description =
+  "OpenCode Go and Command Code GOAT compared model by model. Where the token prices differ it is shown per model, so the rest of the comparison is allowance alone."
+const keywords = [
+  "OpenCode Go",
+  "Command Code GOAT",
+  "coding plan comparison",
+  "AI coding subscription",
+  "token pricing",
+  "model allowance",
+  "LLM usage limits",
+]
+const modified = new Date(plans.fetchedAt).toISOString()
+const models = plans.models.length
+const comparableCount = plans.models.filter(
+  (m) => plans.plans.filter((p) => m.plans[p.id] && typeof m.plans[p.id]!.monthly === "number").length >= 2,
+).length
+
+// schema.org structured data: what this page is, who publishes it, and what
+// the figures are. Dates come from the same read stamp the footer shows, so a
+// crawler and a reader see one freshness claim.
+const structured = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": url("/#org"),
+      name: "Kodeverse",
+      url: canonical,
+    },
+    {
+      "@type": "WebSite",
+      "@id": url("/#site"),
+      url: canonical,
+      name: "Kodeverse",
+      description,
+      inLanguage: "en",
+      publisher: { "@id": url("/#org") },
+    },
+    {
+      "@type": "WebPage",
+      "@id": url("/#page"),
+      url: canonical,
+      name: title,
+      description,
+      isPartOf: { "@id": url("/#site") },
+      dateModified: modified,
+      primaryImageOfPage: { "@type": "ImageObject", url: ogImage, width: 1200, height: 630 },
+      about: plans.plans.map((p) => ({ "@type": "Product", name: p.label, description: p.note })),
+    },
+    {
+      "@type": "Dataset",
+      "@id": url("/#data"),
+      name: "Coding plan allowances by model",
+      description:
+        "Per-model token prices, monthly credit and request estimates for OpenCode Go and Command Code GOAT, read from each vendor's plan page.",
+      keywords,
+      creator: { "@id": url("/#org") },
+      dateModified: modified,
+      temporalCoverage: modified,
+      isAccessibleForFree: true,
+      variablesMeasured: [
+        "Monthly credit (USD)",
+        "Estimated requests per 5 hours",
+        "Estimated requests per week",
+        "Estimated requests per month",
+        "Input price per 1M tokens (USD)",
+        "Output price per 1M tokens (USD)",
+        "Cache read price per 1M tokens (USD)",
+      ],
+      includedInDataCatalog: { "@id": url("/#site") },
+    },
+  ],
+}
+---
+
+<script is:inline>
+  // Theme class before first paint: system preference, then whatever the
+  // reader pinned last visit. The toggle in the nav only flips this class.
+  (() => {
+    let saved = null;
+    try { saved = localStorage.getItem("plan-compare.theme"); } catch {}
+    const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.classList.toggle("dark", dark);
+  })();
+</script>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    {/* Canonical and its alternate. The alternate is the same page under its
+        default locale, which is the honest set for a single-locale document:
+        no translated variant is claimed. */}
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="x-default" href={canonical} />
+    <link rel="alternate" hreflang="en" href={canonical} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywords.join(", ")} />
+
+    {/* Authors and the publisher. Both name this project, which is who wrote
+        and who publishes the comparison; no person is invented. */}
+    <meta name="author" content="Kodeverse" />
+    <meta name="creator" content="Kodeverse" />
+    <meta name="publisher" content="Kodeverse" />
+
+    {/* Robots: indexable, followed, and previewed at full size. The page is a
+        public comparison, so nothing here asks a crawler to hold back. */}
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1" />
+
+    <link rel="icon" type="image/webp" href="/brand.webp" />
+    <link rel="apple-touch-icon" href="/brand.webp" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    {/* Theme colour follows the page tokens, one per mode. */}
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    {/* Open Graph, complete: the crawler's own preview is built from these. */}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kodeverse" />
+    <meta property="og:locale" content="en" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/webp" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="What a ten-dollar coding plan gets you, by Kodeverse" />
+
+    {/* Twitter uses the same card and image as Open Graph. */}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content="What a ten-dollar coding plan gets you, by Kodeverse" />
+
+    <meta name="generator" content={Astro.generator} />
+
+    {/* schema.org structured data, set as text so nothing escapes twice. */}
+    <script type="application/ld+json" set:html={JSON.stringify(structured)} />
+  </head>
+  <body>
+    <svg aria-hidden="true" focusable="false" width="0" height="0" style="position:absolute" set:html={marks} />
+    <slot />
+    {/* client:load, not a server render: the island calls the same toast
+        manager from its click handler, and a server-rendered Toaster would
+        never re-render for it. */}
+    <Toaster client:load />
+  </body>
+</html>

@@ -1,0 +1,9 @@
+---
+import Layout from "@/layouts/main.astro"
+import { CompareApp } from "@/components/compare/compare-app"
+import data from "../data/plans.json"
+---
+
+<Layout>
+  <CompareApp client:load initialData={data} />
+</Layout>
