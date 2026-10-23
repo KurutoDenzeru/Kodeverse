@@ -1,19 +1,20 @@
 // Limits, the way the vendor pages present it: one row per model, two stacked
 // full-width bars for the two plans, the request estimate and the monthly
-// usage as two stacked figures at the right. The most generous rows come
-// first, because those are the ones worth seeing before the list is expanded,
-// and the least generous sink to the bottom where the expander finds them.
+// usage as two stacked figures at the right. Every model both plans publish
+// figures for is on the list, and the most generous rows come first, so the
+// reader meets the best cases before the thin ones.
 //
 // The bars share one logarithmic scale across the whole catalogue, the way the
 // reference list does: a linear scale would draw every capped model as a
 // hairline next to the ones that are free.
 //
-// A grid, not a table. The rows are a comparison, not a data set: no row
-// headers, no sortable columns, no cell borders. One hairline above the header
-// and one above the footer are the only rules, and the space between rows does
-// the separating.
+// On a wide screen the rail holds with CSS sticky and the catalogue scrolls
+// past it: the title, the plan key, and what each vendor claims about its own
+// caps hold still while the evidence moves. The rows draw their bars as they
+// arrive.
 
-import { useMemo } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress";
@@ -22,19 +23,20 @@ import { comparable, ranks, reqOf } from "@/lib/compare";
 import { money, reqText } from "@/lib/format";
 import type { ModelRow, PlanData } from "@/lib/types";
 
-import type { ViewState } from "./view";
-
-const LIM_SIZE = 10;
+import { BrandMark } from "./brand-mark";
+import { gsap, useGSAP } from "./motion";
+import { ProviderLogo } from "./provider-logo";
 
 /** One bar per plan, 8px and square, the shape the reference list uses. The
  *  fill is the shadcn Progress indicator on a transparent track: a visible
  *  grey track behind a short fill only adds noise to a column of them, and the
- *  reference draws none. */
+ *  reference draws none. The data-bar hook lets the section draw the fill in. */
 function Bar({ cls, width }: { cls: "go" | "goat"; width: number }) {
   return (
     <Progress value={width} className="h-2 w-full flex-none">
       <ProgressTrack className="h-2 rounded-none bg-transparent p-0">
         <ProgressIndicator
+          data-bar
           className={"h-full rounded-none " + (cls === "goat" ? "bg-goat" : "bg-go")}
         />
       </ProgressTrack>
@@ -56,15 +58,69 @@ function Figures({ items }: { items: { id: string; text: string }[] }) {
   );
 }
 
-export function LimitsSection({
-  data,
-  view,
-  patch,
-}: {
-  data: PlanData;
-  view: ViewState;
-  patch: (p: Partial<ViewState>) => void;
-}) {
+/** What each vendor says about its own plan, one claim at a time. The marks
+ *  overlap like portraits, the arrows move between claims, and the wording is
+ *  each plan's own note from the baked data, not a paraphrase. */
+function VendorNotes({ data }: { data: PlanData }) {
+  const [i, setI] = useState(0);
+  const p = data.plans[i % data.plans.length];
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="flex items-center">
+        <span className="flex">
+          {data.plans.map((q, qi) => (
+            <span
+              key={q.id}
+              className={
+                "-ml-1.5 flex size-7 items-center justify-center rounded-full border bg-card " +
+                (qi === i ? "z-10 border-foreground/40" : "border-border")
+              }
+              aria-hidden
+            >
+              <BrandMark id={q.id as "opencode" | "commandcode"} small />
+            </span>
+          ))}
+        </span>
+        <span className="fig ml-auto text-[11px] font-medium text-muted-foreground">
+          {(i % data.plans.length) + 1} / {data.plans.length}
+        </span>
+      </div>
+      <blockquote
+        key={p.id}
+        className="mt-4 mb-0 animate-in fade-in slide-in-from-bottom-2 text-[15px] leading-relaxed font-light text-muted-foreground duration-500"
+      >
+        {p.note}
+      </blockquote>
+      <p className="mt-2 mb-0 text-[13px] font-semibold text-foreground">{p.label}</p>
+      <div className="mt-3 flex items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={
+            "What " + data.plans[(i - 1 + data.plans.length) % data.plans.length].label + " says"
+          }
+          className="size-7 rounded-full"
+          onClick={() => setI((n) => (n - 1 + data.plans.length) % data.plans.length)}
+        >
+          <ChevronLeft className="size-4" aria-hidden />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={"What " + data.plans[(i + 1) % data.plans.length].label + " says"}
+          className="size-7 rounded-full"
+          onClick={() => setI((n) => (n + 1) % data.plans.length)}
+        >
+          <ChevronRight className="size-4" aria-hidden />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function LimitsSection({ data }: { data: PlanData }) {
+  const root = useRef<HTMLElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const ranking = data.plans.filter((p) => ranks(p.id, data));
 
   const rows = useMemo(() => {
@@ -76,8 +132,8 @@ export function LimitsSection({
       out.push({ m, free: m.plans[ranking[0]?.id ?? ""]?.monthly === -1, reqTop });
     }
     // The most generous rows come first: the free models and the biggest
-    // allowances are the ones worth seeing before the list is expanded, and
-    // the least generous sink to the bottom where the expander finds them.
+    // allowances are the ones worth seeing first, and the least generous
+    // sink to the bottom of the list.
     return out.sort((a, b) =>
       a.free !== b.free
         ? a.free
@@ -107,35 +163,78 @@ export function LimitsSection({
     return { width, ticks };
   }, [rows]);
 
-  const shown = view.limAll ? rows : rows.slice(0, LIM_SIZE);
+  const shown = rows;
+
+  // The bars draw in behind one matchMedia; motion is dropped when the reader
+  // asks for none. The rail's hold is CSS sticky on a wide screen, so the pin
+  // never fights the grid it lives in. Expanding the list re-draws its bars.
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          "[data-bar]",
+          { scaleX: 0, transformOrigin: "left center" },
+          {
+            scaleX: 1,
+            ease: "none",
+            stagger: 0.05,
+            scrollTrigger: {
+              trigger: list.current,
+              start: "top 88%",
+              end: "bottom 72%",
+              scrub: 0.5,
+            },
+          },
+        );
+      });
+    },
+    { scope: root },
+  );
 
   return (
-    <section id="limits" className="px-5 pb-[clamp(40px,6vw,72px)] md:px-12">
-      <div className="mx-auto max-w-[1360px]">
-        <div className="mb-[clamp(24px,4vh,40px)] flex flex-wrap items-end justify-between gap-4">
-          <div className="max-w-[60ch]">
+    <section
+      ref={root}
+      id="limits"
+      className="border-t border-border px-5 py-[clamp(64px,10vh,140px)] md:px-12"
+    >
+      <div className="mx-auto grid max-w-[1360px] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          {/* The rail holds while the catalogue scrolls past it: the wrapper
+              stretches to the row's full height, so the sticky block travels
+              the whole list. */}
+          <div className="lg:sticky lg:top-24">
             <h2 className="m-0 text-[clamp(23px,3.1vw,36px)] font-bold leading-[1.1] tracking-[-0.03em]">
               Limits
             </h2>
-            <p className="mt-3.5 max-w-[56ch] font-light text-muted-foreground">
-              Estimated requests per 5 hours and monthly usage limits by model.
+            <p className="mt-3.5 max-w-[44ch] font-light text-muted-foreground">
+              Estimated requests per 5 hours and monthly usage across every model both plans publish
+              figures for — {rows.length} right now — on one logarithmic scale.
             </p>
-          </div>
-          {/* The plan key sits with the bars it names, the way the reference
-              list puts it: two marks, two colours, nothing else. */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            {ranking.map((p) => (
-              <span key={p.id} className="flex items-center gap-2 text-[13px] font-medium">
-                <i
-                  className={"inline-block size-2.5 " + (p.cls === "goat" ? "bg-goat" : "bg-go")}
-                />
-                {p.short}
-              </span>
-            ))}
+
+            {/* The plan key sits with the bars it names, the way the reference
+                list puts it: two marks, two colours, nothing else. */}
+            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+              {ranking.map((p) => (
+                <span key={p.id} className="flex items-center gap-2 text-[13px] font-medium">
+                  <i
+                    className={"inline-block size-2.5 " + (p.cls === "goat" ? "bg-goat" : "bg-go")}
+                  />
+                  {p.short}
+                </span>
+              ))}
+            </div>
+
+            <div className="mt-6">
+              <VendorNotes data={data} />
+            </div>
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+          ref={list}
+          className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card"
+        >
           {/* Column labels, once. They are labels, not a header row: no rules,
               no alignment contract, and the bars carry the plan identity. */}
           <div className="hidden grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto] items-center gap-x-6 border-b border-border px-5 py-2.5 text-xs text-muted-foreground md:grid">
@@ -160,12 +259,18 @@ export function LimitsSection({
 
           <ul className="m-0 list-none p-0">
             {shown.map(({ m }) => (
-              <li key={m.key} className="px-5 py-3.5">
+              <li
+                key={m.key}
+                className="group px-5 py-3.5 transition-colors duration-300 hover:bg-accent/30"
+              >
                 {/* One row: the name, then the bars, then the two figure
                     columns. Below md the row becomes two lines, the bars
                     taking the full width under the name. */}
                 <div className="grid grid-cols-1 items-center gap-x-6 gap-y-2.5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto]">
-                  <span className="font-medium">{m.name}</span>
+                  <span className="flex items-center gap-2.5 font-medium">
+                    <ProviderLogo name={m.name} />
+                    {m.name}
+                  </span>
                   <span className="flex flex-col gap-1">
                     {ranking.map((p) => {
                       // One bar per plan. The width is the full scale for a
@@ -229,19 +334,6 @@ export function LimitsSection({
               <span />
             </div>
           </div>
-
-          {rows.length > LIM_SIZE && (
-            <div className="border-t border-border px-5 py-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="font-medium"
-                onClick={() => patch({ limAll: !view.limAll })}
-              >
-                {view.limAll ? "Show fewer models" : "View all " + rows.length + " models"}
-              </Button>
-            </div>
-          )}
         </div>
       </div>
     </section>

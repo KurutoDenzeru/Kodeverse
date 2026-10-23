@@ -3,7 +3,7 @@
 // from this page's own data, so nothing here asserts something the reader
 // cannot check against the tables above.
 import { Info } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -15,13 +15,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { comparable, priceSplit, ranks, tally, TOLERANCE } from "@/lib/compare";
+import { comparable } from "@/lib/compare";
 import { money, pad2 } from "@/lib/format";
 import type { ModelRow, PlanData, PlanSide } from "@/lib/types";
 import { zoneCity } from "@/lib/zone";
 
 import { BrandMark } from "./brand-mark";
+import { gsap, useGSAP } from "./motion";
+import { ProviderLogo } from "./provider-logo";
 import type { ViewState } from "./view";
+
+/** The intro, scrubbed word by word. The keys count occurrences, so they are
+ *  unique and derived from the text itself, and the server and the client
+ *  split it identically. */
+const SCRUB_TEXT =
+  "Everything here comes from the vendor pages listed in the footer. Nothing is estimated unless it says so.";
+const seen = new Map<string, number>();
+const SCRUB_SPANS = SCRUB_TEXT.split(" ").map((w) => {
+  const n = (seen.get(w) ?? 0) + 1;
+  seen.set(w, n);
+  return w + "." + n;
+});
+const SCRUB_WORDS = SCRUB_TEXT.split(" ").length;
 
 /** DeepSeek peak windows are 01:00-04:00 and 06:00-10:00 UTC, so the state
  *  only changes on those four hours. */
@@ -32,26 +47,6 @@ const PEAK = [
 const isPeak = (h: number) => PEAK.some(([a, b]) => h >= a && h < b);
 const EDGES = [1, 4, 6, 10];
 const nextBoundary = (h: number) => EDGES.find((x) => x > h) ?? 1;
-
-/** Caps come from each plan's own limits entry, read off the data rather than
- *  assumed from the plan id, so a flat cap, a derived cap and no cap each get
- *  the sentence that is true of them. */
-const ruleOf = (p: PlanData["plans"][number], data: PlanData): string => {
-  const caps = data.caps[p.id];
-  if (caps.published === false) return "names its windows and publishes no figure for any of them";
-  if ("fiveHour" in caps) {
-    return (
-      "uses flat caps of $" + caps.fiveHour + " for five hours and $" + caps.week + " for a week"
-    );
-  }
-  return (
-    "takes " +
-    Math.round(caps.fiveHourPct * 100) +
-    "% of each model's own limit for five hours and " +
-    Math.round(caps.weekPct * 100) +
-    "% for a week"
-  );
-};
 
 export function MethodSection({
   data,
@@ -64,6 +59,7 @@ export function MethodSection({
   patch: (p: Partial<ViewState>) => void;
   selected: string;
 }) {
+  const root = useRef<HTMLElement>(null);
   const pool = useMemo(() => comparable(data), [data]);
   // One clock for the whole section, advanced in an effect. Reading the clock
   // during render would make every render disagree with the last one; a state
@@ -92,9 +88,6 @@ export function MethodSection({
   }
 
   const about = data.plans.find((p) => p.id === selected) ?? data.plans[0];
-  const sharedCount = pool.length;
-  const t5 = tally("five", data);
-  const ranking = data.plans.filter((p) => ranks(p.id, data));
 
   // A figure is highlighted when its plan publishes one that no other plan
   // carrying this model matches.
@@ -107,32 +100,58 @@ export function MethodSection({
     return all.length > 1 && v === Math.max(...all) && all.filter((x) => x === v).length === 1;
   };
 
-  const splitModels = pool.filter((m) => priceSplit(m, data).length > 0);
-  // The sample is a rate the selected plan publishes, so the card sits beside
-  // the worked example rather than describing a different provider.
-  const sample =
-    pool.find(
-      (m) =>
-        m.plans[about.id] && m.plans[about.id]!.input != null && priceSplit(m, data).length === 0,
-    ) ??
-    pool.find((m) => m.plans[about.id] && m.plans[about.id]!.input != null) ??
-    null;
+  // The intro scrubs in one word at a time as the section crosses the
+  // viewport: the claim is read at the speed of the scroll that proves it.
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          "[data-word]",
+          { opacity: 0.12 },
+          {
+            opacity: 1,
+            ease: "none",
+            stagger: 0.06,
+            scrollTrigger: {
+              trigger: "[data-scrub]",
+              start: "top 85%",
+              end: "top 42%",
+              scrub: true,
+            },
+          },
+        );
+      });
+    },
+    { scope: root },
+  );
 
   return (
     <section
+      ref={root}
       id="method"
-      className="border-t border-border px-5 py-[clamp(60px,9vh,116px)] md:px-12"
+      className="border-t border-border px-5 py-[clamp(64px,10vh,140px)] md:px-12"
     >
       <div className="mx-auto max-w-[1360px]">
-        <div className="mb-[clamp(24px,4vh,40px)] max-w-[60ch]">
-          <h2 className="m-0 text-[clamp(23px,3.1vw,36px)] font-bold leading-[1.1] tracking-[-0.03em]">
-            How the numbers are read
-          </h2>
-          <p className="mt-3.5 max-w-[56ch] font-light text-muted-foreground">
-            Everything here comes from the vendor pages listed in the footer. Nothing is estimated
-            unless it says so.
-          </p>
-          <div className="mt-5 flex items-center gap-2.5">
+        {/* The header lives on the same two columns as the cards below it, so
+            its edges land on the card edges: the picker starts exactly where
+            the right card starts, and the title block shares the left card's
+            column. */}
+        <div className="mb-[clamp(24px,4vh,40px)] grid items-end gap-x-4 gap-y-5 lg:grid-cols-2">
+          <div className="min-w-0">
+            <h2 className="m-0 text-[clamp(23px,3.1vw,36px)] font-bold leading-[1.1] tracking-[-0.03em]">
+              How the numbers are read
+            </h2>
+            <p className="mt-3.5 max-w-[56ch] font-light text-muted-foreground" data-scrub>
+              {SCRUB_TEXT.split(" ").map((w, i) => (
+                <span key={SCRUB_SPANS[i]} data-word className="inline-block">
+                  {w}
+                  {i < SCRUB_WORDS - 1 ? "\u00a0" : ""}
+                </span>
+              ))}
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5 justify-self-start pb-1">
             <Label
               htmlFor="method-model"
               className="fig text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground"
@@ -162,223 +181,83 @@ export function MethodSection({
           </div>
         </div>
 
-        <div className="mb-3.5 overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-2.5 px-6 pt-[22px]">
-            <div className="flex flex-wrap items-center gap-3.5">
-              {pick.name.startsWith("DeepSeek") && <BrandMark id="deepseek" />}
-              <h3 className="m-0 text-[clamp(20px,2.4vw,28px)] font-bold tracking-[-0.03em]">
-                {pick.name}
-              </h3>
+        {/* Two equal halves: the row stretches both cards to one height, and
+            each card's last line sits on the bottom edge. */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 px-6 pt-[22px]">
+              <div className="flex flex-wrap items-center gap-3.5">
+                {/* The model's own maker, from the same sprite the table uses:
+                    the mark follows the picker, whatever it names. */}
+                <ProviderLogo name={pick.name} size={24} />
+                <h3 className="m-0 text-[clamp(20px,2.4vw,28px)] font-bold tracking-[-0.03em]">
+                  {pick.name}
+                </h3>
+              </div>
+            </div>
+
+            {/* One panel per plan, stacked: the two halves split the card
+                exactly, so no void opens between or under them. The plans
+                render in the page's own order, so the second plan sits at the
+                bottom of the card. */}
+            <div className="grid flex-1 grid-rows-2 gap-px bg-border">
+              {data.plans.map((p) => {
+                const v = pick.plans[p.id];
+                const isAbout = p.id === about.id;
+                return (
+                  <div
+                    key={p.id}
+                    className={
+                      "flex flex-col justify-center gap-4 bg-card px-6 " +
+                      (isAbout ? (p.cls === "goat" ? "bg-goat/[0.06]" : "bg-go/[0.06]") : "")
+                    }
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <BrandMark id={p.id as "opencode" | "commandcode"} small />
+                      <span
+                        className={
+                          "text-sm font-semibold " +
+                          (isAbout ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
+                        }
+                      >
+                        {p.label}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      {(["monthly", "five", "week"] as const).map((k) => {
+                        const val = v ? v[k] : null;
+                        const best = val != null && isBest(k, val);
+                        return (
+                          <div key={k}>
+                            <p className="mb-1.5 font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
+                              {{ monthly: "Monthly", five: "Per 5 hours", week: "Per week" }[k]}
+                            </p>
+                            <p
+                              className={
+                                "fig m-0 text-[clamp(19px,2vw,26px)] font-bold leading-none tracking-[-0.03em] " +
+                                (best ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
+                              }
+                            >
+                              {val == null ? (
+                                <span className="text-[0.7em] font-medium text-muted-foreground/70">
+                                  not published
+                                </span>
+                              ) : (
+                                money(val)
+                              )}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* One panel per plan, not a table. The plans are the two sides of
-              the comparison, and a panel lets each side state its three
-              figures at size; a table would put the plan names in a narrow
-              first column and squeeze the numbers that matter. */}
-          <div className="grid gap-px bg-border md:grid-cols-2">
-            {data.plans.map((p) => {
-              const v = pick.plans[p.id];
-              const isAbout = p.id === about.id;
-              return (
-                <div
-                  key={p.id}
-                  className={
-                    "bg-card px-6 py-5 " +
-                    (isAbout ? (p.cls === "goat" ? "bg-goat/[0.06]" : "bg-go/[0.06]") : "")
-                  }
-                >
-                  <div className="flex items-center gap-2.5">
-                    <BrandMark id={p.id as "opencode" | "commandcode"} small />
-                    <span
-                      className={
-                        "text-sm font-semibold " +
-                        (isAbout ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
-                      }
-                    >
-                      {p.label}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-3 gap-4">
-                    {(["monthly", "five", "week"] as const).map((k) => {
-                      const val = v ? v[k] : null;
-                      const best = val != null && isBest(k, val);
-                      return (
-                        <div key={k}>
-                          <p className="mb-1.5 font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
-                            {{ monthly: "Monthly", five: "Per 5 hours", week: "Per week" }[k]}
-                          </p>
-                          <p
-                            className={
-                              "fig m-0 text-[clamp(19px,2vw,26px)] font-bold leading-none tracking-[-0.03em] " +
-                              (best ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
-                            }
-                          >
-                            {val == null ? (
-                              <span className="text-[0.7em] font-medium text-muted-foreground/70">
-                                not published
-                              </span>
-                            ) : (
-                              money(val)
-                            )}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="m-0 flex items-start gap-2.5 border-t border-border px-6 py-5 text-base font-light text-muted-foreground">
-            <Info className="mt-1.5 size-4 shrink-0 text-muted-foreground/70" aria-hidden />
-            {ranking.map((p) => p.label + " " + ruleOf(p, data)).join(". ") +
-              ". " +
-              "Across the " +
-              sharedCount +
-              " models " +
-              ranking.length +
-              " plans both publish, that is " +
-              ranking
-                .map(
-                  (p) =>
-                    p.short + " " + (t5[p.id] ?? 0) + " of " + sharedCount + " five-hour windows",
-                )
-                .join(" and ") +
-              "."}
-          </p>
-        </div>
-
-        <div className="grid gap-3.5 md:grid-cols-2">
           <Card>
-            <CardContent className="flex flex-col gap-4 p-5">
-              <div>
-                <h4 className="m-0 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
-                  Price is not the lever
-                </h4>
-                <p className="mt-2 mb-0 text-[15px] font-light text-muted-foreground">
-                  Most shared models cost the same on every plan that carries them. The comparison
-                  is allowance, so the table shows the cheapest rate and puts the others underneath.
-                </p>
-              </div>
-
-              {/* The sample, as a spec row: label above each figure, the way a
-                  rate should be read. The model it belongs to is named, so the
-                  figures are one real row rather than a rate with no subject. */}
-              {sample && (
-                <div className="rounded-lg border border-border p-4">
-                  <p className="m-0 text-sm font-medium">{sample.name}</p>
-                  <div className="mt-3 grid grid-cols-3 gap-3">
-                    {(
-                      [
-                        ["In", sample.plans[about.id]!.input],
-                        ["Out", sample.plans[about.id]!.output],
-                        ["Cache read", sample.plans[about.id]!.cacheRead],
-                      ] as const
-                    ).map(([label, v]) => (
-                      <div key={label}>
-                        <p className="m-0 font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
-                          {label}
-                        </p>
-                        <p className="fig m-0 mt-1 text-lg font-bold leading-none tracking-[-0.02em]">
-                          {money(v)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="m-0 mt-3 text-[11px] font-light text-muted-foreground">
-                    per 1M tokens, on {about.label}
-                  </p>
-                </div>
-              )}
-
-              {/* One cell per shared model. The strip is the count a reader can
-                  see, and the legend under it says the same in words. */}
-              <div className="mt-auto">
-                <div className="flex flex-wrap gap-0.5 rounded-lg border border-border p-3.5">
-                  {pool.map((m) => (
-                    <i
-                      key={m.key}
-                      className={"tick-cell " + (priceSplit(m, data).length ? "tick-cell-off" : "")}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <i className="inline-block size-2.5 rounded-sm bg-tick" />{" "}
-                    {pool.length - splitModels.length} same on every plan
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <i className="inline-block size-2.5 rounded-sm bg-bad" /> {splitModels.length}{" "}
-                    differ
-                  </span>
-                </div>
-
-                {/* Where they differ, per model: the field, and each plan's own
-                    figure in its colour. A comma list of names said that prices
-                    differ somewhere; this says where, and by how much. */}
-                {splitModels.length > 0 && (
-                  <ul className="mt-3.5 list-none space-y-2.5 p-0">
-                    {splitModels.map((m) => {
-                      const differs = priceSplit(m, data);
-                      const rates = differs
-                        .map((f) => {
-                          const label = {
-                            input: "Input",
-                            output: "Output",
-                            cacheRead: "Cache read",
-                            cacheWrite: "Cache write",
-                          }[f];
-                          const perPlan = ranking.map((p) => ({
-                            p,
-                            v: m.plans[p.id]?.[f as "input"] ?? null,
-                          }));
-                          const values = perPlan
-                            .map((x) => x.v)
-                            .filter((v): v is number => v != null);
-                          if (values.length < 2) return null;
-                          const lo = Math.min(...values);
-                          const hi = Math.max(...values);
-                          if (hi <= lo * TOLERANCE) return null;
-                          return { f, label, perPlan };
-                        })
-                        .filter((x): x is NonNullable<typeof x> => x != null);
-                      if (!rates.length) return null;
-                      return (
-                        <li key={m.key}>
-                          <p className="m-0 text-sm font-medium">{m.name}</p>
-                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-                            {rates.map((r) => (
-                              <span key={r.f} className="fig text-[12px] tabular-nums">
-                                {r.label}:{" "}
-                                {r.perPlan.map((x, i) => (
-                                  <span key={x.p.id}>
-                                    {i > 0 && <span className="text-muted-foreground"> vs </span>}
-                                    <b
-                                      className={
-                                        "font-semibold " +
-                                        (x.p.cls === "goat" ? "text-goat" : "text-go")
-                                      }
-                                    >
-                                      {money(x.v)}
-                                    </b>
-                                  </span>
-                                ))}
-                              </span>
-                            ))}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="flex flex-col gap-4 p-5">
+            <CardContent className="flex flex-1 flex-col gap-4 p-5">
               <div>
                 <h4 className="m-0 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
                   After a cap

@@ -122,8 +122,8 @@ SITE_URL=https://your-domain bun run build
 ```
 
 Without it the build still succeeds, and the head omits only the absolute urls.
-`@fontsource-variable/inter` is self-hosted, so no font is fetched from a third
-party at read time.
+Cabinet Grotesk is self-hosted in `public/fonts`, so no font is fetched from a
+third party at read time.
 
 ## How correctness is checked
 

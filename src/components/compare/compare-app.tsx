@@ -3,7 +3,7 @@
 // that changes the table cannot leave the verdict strip or the worked example
 // describing a plan the reader is no longer looking at.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { toast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -71,58 +71,96 @@ export function CompareApp({ initialData }: { initialData: PlanData }) {
 
   // One click, one toast that reports what happened. The toast is added once
   // and updated in place, so the progress and the result are the same message
-  // rather than a stack that hides the previous one.
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    const before = data;
-    const id = toast.add({
-      title: "Reading both vendor pages",
-      description: "Every figure on this page is rebuilt from what they answer.",
-      type: "loading",
-    });
-    try {
-      const result = await runRefresh(before, knownCounts, () => {});
-      if (result.ok && result.data) {
-        setData(result.data);
-        toast.update(id, {
-          title: "Figures updated",
-          description: refreshSummary(before, result.data),
-          type: "success",
-        });
-      } else if (result.refused) {
-        toast.update(id, {
-          title: "Refresh refused",
-          description: "The reply did not parse cleanly, so the figures on screen were left alone.",
-          type: "error",
-        });
-      } else {
-        // Name the plan that failed and the reason, in one line. The remedy is
-        // named only when every route was exhausted, because that is the only
-        // case where the reader can act on it.
-        const missed = result.steps
-          .filter((s) => s.state === "failed")
-          .map((s) => data.plans.find((p) => p.id === s.id)?.label ?? s.id);
-        const exhausted = result.steps.every((s) => s.state === "failed");
-        toast.update(id, {
-          title: "Refresh failed",
-          description:
+  // rather than a stack that hides the previous one. A silent run (the
+  // automatic check a visit performs) says nothing unless a figure moved.
+  const onRefresh = useCallback(
+    async (silent = false) => {
+      setRefreshing(true);
+      const before = data;
+      const id = silent
+        ? null
+        : toast.add({
+            title: "Reading both vendor pages",
+            description: "Every figure on this page is rebuilt from what they answer.",
+            type: "loading",
+          });
+      const say = (kind: "success" | "error", title: string, description: string) => {
+        if (silent) return;
+        toast.update(id!, { title, description, type: kind });
+      };
+      try {
+        const result = await runRefresh(before, knownCounts, () => {});
+        if (result.ok && result.data) {
+          setData(result.data);
+          const summary = refreshSummary(before, result.data);
+          if (silent) {
+            // A visit that finds the same figures stays quiet; the stamp in the
+            // footer already says how old the read is.
+            if (!/Nothing moved/.test(summary)) {
+              toast.add({ title: "Figures updated", description: summary, type: "success" });
+            }
+          } else {
+            toast.update(id!, {
+              title: "Figures updated",
+              description: summary,
+              type: "success",
+            });
+          }
+        } else if (result.refused) {
+          say(
+            "error",
+            "Refresh refused",
+            "The reply did not parse cleanly, so the figures on screen were left alone.",
+          );
+        } else {
+          // Name the plan that failed and the reason, in one line. The remedy is
+          // named only when every route was exhausted, because that is the only
+          // case where the reader can act on it.
+          const missed = result.steps
+            .filter((s) => s.state === "failed")
+            .map((s) => data.plans.find((p) => p.id === s.id)?.label ?? s.id);
+          const exhausted = result.steps.every((s) => s.state === "failed");
+          say(
+            "error",
+            "Refresh failed",
             "Could not read " +
-            missed.join(" or ") +
-            ". The figures on screen were left alone." +
-            (exhausted ? " Start the local read proxy: bun scripts/serve.mjs." : ""),
-          type: "error",
-        });
+              missed.join(" or ") +
+              ". The figures on screen were left alone." +
+              (exhausted ? " Start the local read proxy: bun scripts/serve.mjs." : ""),
+          );
+        }
+      } catch (e) {
+        say("error", "Refresh failed", e instanceof Error ? e.message : String(e));
+      } finally {
+        setRefreshing(false);
       }
-    } catch (e) {
-      toast.update(id, {
-        title: "Refresh failed",
-        description: e instanceof Error ? e.message : String(e),
-        type: "error",
-      });
-    } finally {
-      setRefreshing(false);
+    },
+    [data, knownCounts],
+  );
+
+  // Every visit and every reload checks the vendors once, without a click.
+  // The ten-minute throttle keeps a burst of reloads from hammering the read
+  // routes; a manual Refresh always reads regardless of the throttle.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (autoChecked.current) return;
+    autoChecked.current = true;
+    const KEY = "plan-compare.autorefresh";
+    let last = 0;
+    try {
+      last = Number(localStorage.getItem(KEY) ?? 0);
+    } catch {
+      /* private mode */
     }
-  }, [data, knownCounts]);
+    const now = Date.now();
+    if (now - last < 10 * 60 * 1000) return;
+    try {
+      localStorage.setItem(KEY, String(now));
+    } catch {
+      /* private mode */
+    }
+    void onRefresh(true);
+  }, [onRefresh]);
 
   return (
     // One provider inside the island, so every hover label on the page (the
@@ -134,10 +172,12 @@ export function CompareApp({ initialData }: { initialData: PlanData }) {
         onOpenChanges={() => setChangesOpen(true)}
         changesCount={changeCount}
       />
-      <main id="top" className="overflow-x-clip">
+      {/* clip, not hidden: both forbid horizontal scroll, but hidden would
+          turn main into a scroll container and snap every sticky rail. */}
+      <main id="top" className="w-full max-w-full overflow-x-clip">
         <Hero />
         <PlanCards data={data} selected={selected} onSelect={setSelected} />
-        <LimitsSection data={data} view={view} patch={patch} />
+        <LimitsSection data={data} />
         <ModelsSection data={data} view={view} patch={patch} selected={selected} />
         <MethodSection data={data} view={view} patch={patch} selected={selected} />
       </main>

@@ -58,6 +58,7 @@ import type { ModelRow, PlanData, PlanMeta } from "@/lib/types";
 import { NotPublished, WinnerBadge, planCls } from "./bits";
 import { BrandMark } from "./brand-mark";
 import { pageItems } from "./page-items";
+import { ProviderLogo } from "./provider-logo";
 import type { ViewState } from "./view";
 
 const WINDOW_FIELD = { five: "req5h", week: "reqWeek", month: "reqMonth" } as const;
@@ -228,7 +229,7 @@ export function ModelsSection({
   return (
     <section
       id="models"
-      className="border-t border-border px-5 py-[clamp(60px,9vh,116px)] md:px-12"
+      className="border-t border-border px-5 py-[clamp(64px,10vh,140px)] md:px-12"
     >
       <div className="mx-auto max-w-[1360px]">
         <div className="mb-[clamp(24px,4vh,40px)] max-w-[60ch]">
@@ -300,19 +301,15 @@ export function ModelsSection({
             </TabsList>
           </Tabs>
           {onRequests && (
-            <ToggleGroup
-              value={[view.win]}
-              onValueChange={(v) => {
-                if (v[0]) patch({ win: v[0] as Window, page: 1 });
-              }}
-              aria-label="Request window"
-            >
-              {(["five", "week", "month"] as Window[]).map((w) => (
-                <ToggleGroupItem key={w} value={w} size="sm">
-                  {{ five: "5h", week: "Week", month: "Month" }[w]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            <Tabs value={view.win} onValueChange={(v) => patch({ win: v as Window, page: 1 })}>
+              <TabsList aria-label="Request window">
+                {(["five", "week", "month"] as Window[]).map((w) => (
+                  <TabsTrigger key={w} value={w}>
+                    {{ five: "5h", week: "Week", month: "Month" }[w]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           )}
           <span className="fig ml-auto text-xs text-muted-foreground" data-testid="count">
             {rows.length} of {data.models.length} models
@@ -321,8 +318,8 @@ export function ModelsSection({
 
         <div
           id="table-wrap"
-          className="rounded-xl border border-border bg-card"
-          style={{ scrollMarginTop: "76px" }}
+          className="overflow-hidden rounded-2xl border border-border bg-card"
+          style={{ scrollMarginTop: "96px" }}
         >
           {/* table-fixed below md so the columns cannot push the card wider
               than the viewport: the widths become shares of the card instead
@@ -385,17 +382,22 @@ export function ModelsSection({
                 return (
                   <TableRow key={m.key}>
                     <TableCell className="font-medium whitespace-normal">
-                      {m.name}
-                      {carriers.length === 1 && (
-                        <Badge variant="outline" className="ml-1.5 align-middle text-[10px]">
-                          <Minus className="size-2.5" aria-hidden /> solo
-                        </Badge>
-                      )}
-                      {split.length > 0 && (
-                        <Badge variant="secondary" className="ml-1.5 align-middle text-[10px]">
-                          <Tag className="size-2.5" aria-hidden /> prices differ
-                        </Badge>
-                      )}
+                      <span className="flex items-start gap-2.5">
+                        <ProviderLogo name={m.name} className="mt-0.5" />
+                        <span>
+                          {m.name}
+                          {carriers.length === 1 && (
+                            <Badge variant="outline" className="ml-1.5 align-middle text-[10px]">
+                              <Minus className="size-2.5" aria-hidden /> solo
+                            </Badge>
+                          )}
+                          {split.length > 0 && (
+                            <Badge variant="secondary" className="ml-1.5 align-middle text-[10px]">
+                              <Tag className="size-2.5" aria-hidden /> prices differ
+                            </Badge>
+                          )}
+                        </span>
+                      </span>
                     </TableCell>
                     {RATE_FIELDS.map((f) => {
                       const cheap = priceOf(m, data, f);

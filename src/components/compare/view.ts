@@ -17,7 +17,6 @@ export interface ViewState {
   logPage: number;
   logSize: number;
   modelEx: string;
-  limAll: boolean;
 }
 
 export const initialView: ViewState = {
@@ -36,5 +35,4 @@ export const initialView: ViewState = {
   logPage: 1,
   logSize: 25,
   modelEx: "deepseek41flash",
-  limAll: false,
 };

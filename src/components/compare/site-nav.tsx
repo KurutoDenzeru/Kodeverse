@@ -69,16 +69,19 @@ export function SiteNav({
     (now.getHours() < 12 ? "AM" : "PM");
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="mx-auto flex h-16 w-full max-w-[1360px] items-center gap-3 px-5 md:gap-5 md:px-12">
+    <header className="sticky top-0 z-40 px-4 pt-3 pb-3 md:px-8">
+      {/* A floating glass pill, not a full-width bar: the page's ambient stage
+          shows through on both sides of it, and the scroll never pins a hard
+          rule across the top of the viewport. */}
+      <div className="mx-auto flex h-14 w-full max-w-[1360px] items-center gap-3 rounded-full border border-border/70 bg-background/70 pl-3 pr-3 shadow-[0_10px_40px_-12px_rgb(0_0_0/0.18)] backdrop-blur-xl md:gap-5 md:pr-3 supports-[backdrop-filter]:bg-background/55">
         <a
           className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold tracking-tight text-foreground no-underline"
           href="#top"
         >
-          <Scale className="size-[18px] shrink-0 text-muted-foreground" aria-hidden />
+          <img src="/brand.webp" alt="" width={28} height={28} className="size-7 rounded-lg" />
           {/* The wordmark steps aside before it can truncate mid-word; the
-              scale mark carries the brand at the narrowest width. */}
-          <span className="hidden truncate sm:inline">What a coding plan gets you</span>
+              brand mark carries the site at the narrowest width. */}
+          <span className="hidden truncate sm:inline">Kodeverse</span>
         </a>
 
         <nav className="ml-1 flex min-w-0 items-center gap-0.5" aria-label="Sections">
@@ -87,8 +90,8 @@ export function SiteNav({
               key={href}
               href={href}
               // The glyph is the link at every width; the word joins it where
-              // the row has room, so the bar never wraps to a second line.
-              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground"
+              // the row has room, so the pill never wraps to a second line.
+              className="flex items-center gap-2 rounded-full px-2.5 py-2 text-[13px] font-medium text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground"
             >
               <Icon className="size-4 shrink-0" aria-hidden />
               <span className="hidden lg:inline">{label}</span>
@@ -161,7 +164,7 @@ export function SiteNav({
           </Tooltip>
           <Button
             id="refresh-trigger"
-            onClick={onRefresh}
+            onClick={() => onRefresh()}
             disabled={refreshing}
             title="Read both vendor pages again and rebuild every figure"
             className="gap-2 rounded-full"

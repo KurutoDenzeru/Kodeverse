@@ -1,4 +1,6 @@
-// The read: a three-window stat row over one card per plan.
+// The read: one gapless bento. The three windows the reader arrives with sit
+// on the top row, the two plans share the row below, and every cell interlocks
+// (3 x 2 + 2 x 3 = two full rows of six), so the grid never leaves a void.
 //
 // The row is the whole comparison in one glance: what each plan allows in five
 // hours, in a week, and in a month, and who wins how many of the comparable
@@ -6,8 +8,10 @@
 // answer before any scrolling, and the row earns its place by covering all
 // three windows rather than repeating the monthly figure alone.
 //
-// Plain numbers in divided columns, not cards: the figures are the content, and
-// a card box around each one would add three containers and no information.
+// Plain numbers in divided columns, not cards inside cards: the figures are the
+// content, and a box around each one would add containers and no information.
+
+import { useRef } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { comparable, tally } from "@/lib/compare";
@@ -16,6 +20,7 @@ import type { PlanData, PlanMeta } from "@/lib/types";
 
 import { BrandMark } from "./brand-mark";
 import { modelCount } from "./model-facts";
+import { gsap, useGSAP } from "./motion";
 
 /** The best monthly allowance any model of this plan publishes. */
 const peak = (id: string, data: PlanData): number =>
@@ -112,6 +117,7 @@ export function PlanCards({
   selected: string;
   onSelect: (id: string) => void;
 }) {
+  const root = useRef<HTMLElement>(null);
   const ranked = data.plans
     .filter((p) => p.ranks !== false)
     .sort((a, b) => peak(b.id, data) / b.price - peak(a.id, data) / a.price);
@@ -124,15 +130,58 @@ export function PlanCards({
     monthly: tally("monthly", data),
   };
 
+  // Card stacking: the bento cells ride up and settle as the section crosses
+  // the viewport, staggered so the grid assembles bottom-first, the way a deck
+  // is dealt. Scrubbed, so the reader owns the motion.
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          "[data-bento]",
+          { y: 90, opacity: 0, scale: 0.94 },
+          {
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            ease: "none",
+            stagger: 0.4,
+            scrollTrigger: {
+              trigger: root.current,
+              start: "top 88%",
+              end: "top 34%",
+              scrub: 0.6,
+            },
+          },
+        );
+      });
+    },
+    { scope: root },
+  );
+
   return (
-    <section id="read" className="px-5 pb-[clamp(40px,6vw,72px)] md:px-12">
+    <section ref={root} id="read" className="px-5 pb-[clamp(56px,9vh,120px)] md:px-12">
       <div className="mx-auto max-w-[1360px]">
-        {/* Three windows, one row. The plan figures sit under their own mark,
-            and the tally under the figures, so a column reads top to bottom as
-            what the plan allows and how often it leads. */}
-        <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
+        <div className="mb-[clamp(24px,4vh,44px)] max-w-[60ch]">
+          <h2 className="m-0 text-[clamp(23px,3.1vw,36px)] font-bold leading-[1.1] tracking-[-0.03em]">
+            One price, read three ways
+          </h2>
+          <p className="mt-3.5 max-w-[56ch] font-light text-muted-foreground">
+            What each plan allows in five hours, in a week, and in a month, and how often it leads
+            across the models both plans publish.
+          </p>
+        </div>
+
+        {/* Gapless by construction: hairline gaps painted by the bg-border
+            container, dense flow, and spans that tile 6 columns exactly twice
+            over. 3 windows x 2 cols + 2 plans x 3 cols = 12 cells, no void. */}
+        <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border [grid-auto-flow:dense] md:grid-cols-6">
           {WINDOWS.map(({ field, label, note }) => (
-            <div key={field} className="bg-card p-[clamp(20px,2.6vw,28px)]">
+            <div
+              key={field}
+              data-bento
+              className="bg-card p-[clamp(20px,2.6vw,30px)] transition-colors duration-300 hover:bg-accent/40 md:col-span-2"
+            >
               <div className="flex items-baseline justify-between gap-3">
                 <h3 className="m-0 text-sm font-semibold tracking-tight">{label}</h3>
                 <Tooltip>
@@ -149,16 +198,16 @@ export function PlanCards({
                 </Tooltip>
               </div>
 
-              <div className="mt-4 grid gap-3">
+              <div className="mt-5 grid gap-3.5">
                 {ranked.map((p) => {
                   const v = windowFigure(p, data, field);
                   const wins = tallies[field][p.id] ?? 0;
                   return (
                     <div key={p.id} className="flex items-center gap-3">
                       <BrandMark id={p.id as "opencode" | "commandcode"} small />
-                      <span className="fig text-[clamp(20px,2.2vw,26px)] font-bold leading-none tracking-[-0.03em]">
+                      <span className="fig text-[clamp(22px,2.4vw,30px)] font-bold leading-none tracking-[-0.03em]">
                         {v == null ? (
-                          <span className="text-[0.7em] font-medium text-muted-foreground/70">
+                          <span className="text-[0.62em] font-medium text-muted-foreground/70">
                             not published
                           </span>
                         ) : (
@@ -173,28 +222,14 @@ export function PlanCards({
                 })}
               </div>
 
-              <p className="mb-0 mt-4 border-t border-border pt-3 text-[13px] font-light text-muted-foreground">
+              <p className="mb-0 mt-5 border-t border-border pt-3.5 text-[13px] font-light text-muted-foreground">
                 {tallies[field].tie
                   ? `${tallies[field].tie} of ${shared} tie`
                   : `no ties across ${shared} models`}
               </p>
             </div>
           ))}
-        </div>
 
-        {unranked.length > 0 && (
-          <p className="mt-4 max-w-[76ch] text-sm font-light text-muted-foreground">
-            {unranked
-              .map(
-                (p) =>
-                  `${p.label} publishes no allowance figure, so there is nothing to rank it on`,
-              )
-              .join(". ")}
-            .
-          </p>
-        )}
-
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
           {data.plans.map((p) => {
             const rule = capRuleText(p, data);
             const figs = capFigures(p, data);
@@ -203,21 +238,22 @@ export function PlanCards({
               <button
                 key={p.id}
                 type="button"
+                data-bento
                 aria-pressed={on}
                 onClick={() => onSelect(p.id)}
                 className={
-                  "rounded-xl border bg-card p-[clamp(20px,2.6vw,30px)] text-left transition-colors " +
+                  "group rounded-none bg-card p-[clamp(20px,2.6vw,34px)] text-left transition-colors duration-300 md:col-span-3 " +
                   (p.cls === "goat"
                     ? on
-                      ? "border-goat bg-goat/[0.07]"
-                      : "border-border hover:border-goat/50"
+                      ? "bg-goat/[0.07] hover:bg-goat/[0.1]"
+                      : "hover:bg-accent/40"
                     : on
-                      ? "border-go bg-go/[0.07]"
-                      : "border-border hover:border-go/50")
+                      ? "bg-go/[0.07] hover:bg-go/[0.1]"
+                      : "hover:bg-accent/40")
                 }
               >
                 <div className="flex items-start justify-between gap-4">
-                  <h3 className="m-0 flex items-center gap-2.5 text-[clamp(20px,2.4vw,29px)] font-bold tracking-[-0.03em]">
+                  <h3 className="m-0 flex items-center gap-2.5 text-[clamp(20px,2.4vw,30px)] font-bold tracking-[-0.03em]">
                     <BrandMark id={p.id as "opencode" | "commandcode"} />
                     {p.label}
                   </h3>
@@ -231,7 +267,7 @@ export function PlanCards({
                   </span>
                 </div>
 
-                <div className="mt-6 border-t border-border pt-5">
+                <div className="mt-7 border-t border-border pt-5">
                   <p className="mb-3.5 font-mono text-[10px] uppercase leading-tight tracking-[0.1em] text-muted-foreground">
                     How it caps
                   </p>
@@ -256,12 +292,12 @@ export function PlanCards({
                   </dl>
                 </div>
 
-                <div className="mt-6 grid grid-cols-2 gap-x-[26px] gap-y-5">
+                <div className="mt-7 grid grid-cols-2 gap-x-[26px] gap-y-6">
                   <div className="col-span-2">
                     <p className="mb-2 font-mono text-[10px] uppercase leading-tight tracking-[0.1em] text-muted-foreground">
                       Best case month
                     </p>
-                    <p className="fig m-0 text-[clamp(27px,3.2vw,35px)] font-bold leading-none tracking-[-0.03em]">
+                    <p className="fig m-0 text-[clamp(28px,3.4vw,40px)] font-bold leading-none tracking-[-0.03em] transition-transform duration-500 ease-out group-hover:translate-x-1">
                       {money(peak(p.id, data))}
                     </p>
                   </div>
@@ -311,13 +347,25 @@ export function PlanCards({
                   </div>
                 </div>
 
-                <p className="mb-0 mt-6 max-w-[70ch] text-sm font-light text-muted-foreground">
+                <p className="mb-0 mt-7 max-w-[70ch] text-sm font-light text-muted-foreground">
                   {p.note}
                 </p>
               </button>
             );
           })}
         </div>
+
+        {unranked.length > 0 && (
+          <p className="mt-5 max-w-[76ch] text-sm font-light text-muted-foreground">
+            {unranked
+              .map(
+                (p) =>
+                  `${p.label} publishes no allowance figure, so there is nothing to rank it on`,
+              )
+              .join(". ")}
+            .
+          </p>
+        )}
       </div>
     </section>
   );

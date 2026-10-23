@@ -1,13 +1,36 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
+
+/* Cabinet Grotesk, self-hosted in public/fonts: no font is fetched from a
+   third party at read time. */
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/cabinet-grotesk-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/cabinet-grotesk-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/cabinet-grotesk-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Inter Variable", sans-serif;
+  --font-sans: "Cabinet Grotesk", "Inter", system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -122,14 +145,35 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    /* The ambient stage: the canvas carries two tinted radial washes, one per
+       plan hue, and a film grain baked into the tile. Decoration only; no
+       figure ever sits on a hue. */
+    background-color: var(--background);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+      radial-gradient(
+        52rem 36rem at 12% -8%,
+        color-mix(in oklab, var(--go) 7%, transparent),
+        transparent 62%
+      ),
+      radial-gradient(
+        48rem 34rem at 94% 2%,
+        color-mix(in oklab, var(--goat) 6%, transparent),
+        transparent 60%
+      );
+    background-attachment: fixed, fixed, fixed;
+    background-size:
+      220px 220px,
+      auto,
+      auto;
+    @apply text-foreground;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
   html {
-    @apply font-sans;
+    @apply font-sans antialiased;
   }
 }
 
@@ -149,8 +193,6 @@
      the card in both modes */
   --h-off: oklch(0.9 0.006 60);
   --h-night: oklch(0.78 0.012 60);
-  /* the quiet ink for a run of many cells that are all alike */
-  --tick: oklch(0.87 0.008 60);
 }
 .dark {
   --go: oklch(0.72 0.13 252);
@@ -159,7 +201,6 @@
   --bad: oklch(0.72 0.16 12);
   --h-off: oklch(0.3 0.008 60);
   --h-night: oklch(0.42 0.012 60);
-  --tick: oklch(0.33 0.008 60);
 }
 
 @theme inline {
@@ -168,7 +209,6 @@
   --color-goat: var(--goat);
   --color-ok: var(--ok);
   --color-bad: var(--bad);
-  --color-tick: var(--tick);
 }
 
 @layer utilities {
@@ -197,18 +237,28 @@
     outline: 2px solid var(--bad);
     outline-offset: 1px;
   }
-  /* One cell per shared model, so a claim about prices is something the
-     reader can count. */
-  .tick-cell {
-    min-width: 5px;
-    height: 16px;
-    border-radius: 2px;
-    background: var(--tick);
-    flex: 1 1 5px;
+}
+
+/* ---------- motion chrome ----------
+   The marquee is CSS, so it costs no script and survives hydration. GSAP owns
+   everything scroll-linked; the grain and the washes never move. */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
   }
-  .tick-cell-off {
-    background: var(--bad);
-  }
+}
+.marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, black 14%, black 86%, transparent);
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 44s linear infinite;
+}
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track {
+  animation-play-state: paused;
 }
 
 /* Reduced motion is the default mode for anything above a hover state: the
