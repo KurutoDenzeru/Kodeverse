@@ -17,7 +17,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { comparable } from "@/lib/compare";
 import { money, pad2 } from "@/lib/format";
-import type { ModelRow, PlanData, PlanSide } from "@/lib/types";
+import type { ModelRow, PlanData } from "@/lib/types";
 import { zoneCity } from "@/lib/zone";
 
 import { BrandMark } from "./brand-mark";
@@ -48,16 +48,62 @@ const isPeak = (h: number) => PEAK.some(([a, b]) => h >= a && h < b);
 const EDGES = [1, 4, 6, 10];
 const nextBoundary = (h: number) => EDGES.find((x) => x > h) ?? 1;
 
+/** The versus board reads one window across both plans. The gap names the
+ *  winner and the margin: a figure the other plan does not publish stands
+ *  alone, unlimited beats a number, and equal figures are even. */
+type VersusGap =
+  | { kind: "win"; winner: "opencode" | "commandcode"; text: string }
+  | { kind: "open"; side: "opencode" | "commandcode"; text: string }
+  | { kind: "tie"; text: string };
+
+const versusGap = (left: number | null, right: number | null): VersusGap => {
+  if (left == null && right == null) return { kind: "tie", text: "not published" };
+  if (left == null) return { kind: "open", side: "commandcode", text: "Go does not publish" };
+  if (right == null) return { kind: "open", side: "opencode", text: "GOAT does not publish" };
+  if (left === -1 && right === -1) return { kind: "tie", text: "unlimited on both" };
+  if (left === -1) return { kind: "win", winner: "opencode", text: "Go, unlimited" };
+  if (right === -1) return { kind: "win", winner: "commandcode", text: "GOAT, unlimited" };
+  const diff = Math.abs(left - right);
+  if (diff <= 0) return { kind: "tie", text: "even" };
+  return left > right
+    ? { kind: "win", winner: "opencode", text: "Go by " + money(diff) }
+    : { kind: "win", winner: "commandcode", text: "GOAT by " + money(diff) };
+};
+
+/** The winner takes its plan colour; the other side steps back to half ink. */
+const versusTone = (gap: VersusGap, side: "opencode" | "commandcode"): string => {
+  if (gap.kind === "tie") return "text-foreground";
+  const leads = gap.kind === "win" ? gap.winner === side : gap.side === side;
+  if (leads) return side === "opencode" ? "text-go" : "text-goat";
+  return "text-muted-foreground/50";
+};
+
+/** The margin, said once under the window label, in the winner's colour. */
+function VersusChip({ gap }: { gap: VersusGap }) {
+  return (
+    <span
+      className={
+        "fig inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium leading-tight " +
+        (gap.kind === "win"
+          ? gap.winner === "opencode"
+            ? "border-go/40 bg-go/10 text-go"
+            : "border-goat/40 bg-goat/10 text-goat"
+          : "border-border text-muted-foreground")
+      }
+    >
+      {gap.text}
+    </span>
+  );
+}
+
 export function MethodSection({
   data,
   view,
   patch,
-  selected,
 }: {
   data: PlanData;
   view: ViewState;
   patch: (p: Partial<ViewState>) => void;
-  selected: string;
 }) {
   const root = useRef<HTMLElement>(null);
   const pool = useMemo(() => comparable(data), [data]);
@@ -87,19 +133,6 @@ export function MethodSection({
     }
   }
 
-  const about = data.plans.find((p) => p.id === selected) ?? data.plans[0];
-
-  // A figure is highlighted when its plan publishes one that no other plan
-  // carrying this model matches.
-  const numsFor = (k: keyof PlanSide) =>
-    data.plans
-      .filter((p) => pick!.plans[p.id] && typeof pick!.plans[p.id]![k] === "number")
-      .map((p) => pick!.plans[p.id]![k] as number);
-  const isBest = (k: keyof PlanSide, v: number) => {
-    const all = numsFor(k);
-    return all.length > 1 && v === Math.max(...all) && all.filter((x) => x === v).length === 1;
-  };
-
   // The intro scrubs in one word at a time as the section crosses the
   // viewport: the claim is read at the speed of the scroll that proves it.
   useGSAP(
@@ -121,6 +154,16 @@ export function MethodSection({
             },
           },
         );
+        // The day rises one hour at a time when the strip arrives.
+        gsap.from("[data-clock] i", {
+          scaleY: 0.35,
+          opacity: 0,
+          transformOrigin: "bottom center",
+          duration: 0.5,
+          ease: "power2.out",
+          stagger: 0.025,
+          scrollTrigger: { trigger: "[data-clock]", start: "top 88%" },
+        });
       });
     },
     { scope: root },
@@ -151,7 +194,9 @@ export function MethodSection({
               ))}
             </p>
           </div>
-          <div className="flex items-center gap-2.5 justify-self-start pb-1">
+          {/* The picker sits at the far right, its edge on the right card's
+              edge, and every option carries its model's own mark. */}
+          <div className="flex items-center gap-2.5 justify-self-end pb-1">
             <Label
               htmlFor="method-model"
               className="fig text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground"
@@ -166,14 +211,20 @@ export function MethodSection({
               <SelectTrigger
                 id="method-model"
                 aria-label="Model the example works through"
-                className="min-w-[260px]"
+                className="w-[300px] max-w-full"
               >
-                <SelectValue className="text-sm first-letter:uppercase" />
+                <span className="flex min-w-0 items-center gap-2">
+                  <ProviderLogo name={pick.name} size={15} />
+                  <SelectValue className="text-sm first-letter:uppercase" />
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {pool.map((m) => (
                   <SelectItem key={m.key} value={m.key}>
-                    {m.name}
+                    <span className="flex items-center gap-2.5">
+                      <ProviderLogo name={m.name} size={14} />
+                      {m.name}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -181,75 +232,75 @@ export function MethodSection({
           </div>
         </div>
 
-        {/* Two equal halves: the row stretches both cards to one height, and
-            each card's last line sits on the bottom edge. */}
+        {/* Two equal halves: the row stretches both cards to one height. */}
         <div className="grid gap-4 lg:grid-cols-2">
+          {/* The worked example as a versus board: each plan owns one column,
+              the model owns the middle, and every window reads across in one
+              line with the gap named under it. */}
           <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2.5 px-6 pt-[22px]">
-              <div className="flex flex-wrap items-center gap-3.5">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-6 gap-y-2 px-6 pt-[22px] pb-5">
+              <div className="flex items-center gap-2.5 justify-self-start">
+                <BrandMark id="opencode" small />
+                <span className="text-sm font-semibold text-go">OpenCode Go</span>
+              </div>
+              <div className="flex flex-col items-center gap-1.5 text-center">
                 {/* The model's own maker, from the same sprite the table uses:
                     the mark follows the picker, whatever it names. */}
-                <ProviderLogo name={pick.name} size={24} />
-                <h3 className="m-0 text-[clamp(20px,2.4vw,28px)] font-bold tracking-[-0.03em]">
+                <ProviderLogo name={pick.name} size={30} />
+                <h3 className="m-0 text-[clamp(17px,1.8vw,23px)] font-bold tracking-[-0.03em]">
                   {pick.name}
                 </h3>
               </div>
+              <div className="flex items-center gap-2.5 justify-self-end">
+                <span className="text-sm font-semibold text-goat">Command Code GOAT</span>
+                <BrandMark id="commandcode" small />
+              </div>
             </div>
 
-            {/* One panel per plan, stacked: the two halves split the card
-                exactly, so no void opens between or under them. The plans
-                render in the page's own order, so the second plan sits at the
-                bottom of the card. */}
-            <div className="grid flex-1 grid-rows-2 gap-px bg-border">
-              {data.plans.map((p) => {
-                const v = pick.plans[p.id];
-                const isAbout = p.id === about.id;
+            <div className="grid flex-1 grid-rows-3 gap-px bg-border">
+              {(["monthly", "five", "week"] as const).map((k) => {
+                const left = pick.plans.opencode?.[k] ?? null;
+                const right = pick.plans.commandcode?.[k] ?? null;
+                const gap = versusGap(left, right);
                 return (
                   <div
-                    key={p.id}
-                    className={
-                      "flex flex-col justify-center gap-4 bg-card px-6 " +
-                      (isAbout ? (p.cls === "goat" ? "bg-goat/[0.06]" : "bg-go/[0.06]") : "")
-                    }
+                    key={k}
+                    className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-6 gap-y-1 bg-card px-6"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <BrandMark id={p.id as "opencode" | "commandcode"} small />
-                      <span
-                        className={
-                          "text-sm font-semibold " +
-                          (isAbout ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
-                        }
-                      >
-                        {p.label}
+                    <p
+                      className={
+                        "fig m-0 justify-self-start text-[clamp(21px,2.2vw,28px)] font-bold leading-none tracking-[-0.03em] " +
+                        versusTone(gap, "opencode")
+                      }
+                    >
+                      {left == null ? (
+                        <span className="text-[0.62em] font-medium text-muted-foreground/60">
+                          not published
+                        </span>
+                      ) : (
+                        money(left)
+                      )}
+                    </p>
+                    <div className="flex flex-col items-center gap-1.5 text-center">
+                      <span className="font-mono text-[10px] uppercase leading-tight tracking-[0.12em] text-muted-foreground">
+                        {{ monthly: "Monthly", five: "Per 5 hours", week: "Per week" }[k]}
                       </span>
+                      <VersusChip gap={gap} />
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      {(["monthly", "five", "week"] as const).map((k) => {
-                        const val = v ? v[k] : null;
-                        const best = val != null && isBest(k, val);
-                        return (
-                          <div key={k}>
-                            <p className="mb-1.5 font-mono text-[10px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
-                              {{ monthly: "Monthly", five: "Per 5 hours", week: "Per week" }[k]}
-                            </p>
-                            <p
-                              className={
-                                "fig m-0 text-[clamp(19px,2vw,26px)] font-bold leading-none tracking-[-0.03em] " +
-                                (best ? (p.cls === "goat" ? "text-goat" : "text-go") : "")
-                              }
-                            >
-                              {val == null ? (
-                                <span className="text-[0.7em] font-medium text-muted-foreground/70">
-                                  not published
-                                </span>
-                              ) : (
-                                money(val)
-                              )}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <p
+                      className={
+                        "fig m-0 justify-self-end text-[clamp(21px,2.2vw,28px)] font-bold leading-none tracking-[-0.03em] " +
+                        versusTone(gap, "commandcode")
+                      }
+                    >
+                      {right == null ? (
+                        <span className="text-[0.62em] font-medium text-muted-foreground/60">
+                          not published
+                        </span>
+                      ) : (
+                        money(right)
+                      )}
+                    </p>
                   </div>
                 );
               })}
@@ -268,9 +319,11 @@ export function MethodSection({
                 </p>
               </div>
 
-              <div className="mt-auto font-mono text-xs leading-relaxed text-muted-foreground">
+              <div className="mt-auto flex flex-col">
                 <div className="flex items-center gap-1.5">
-                  DeepSeek peak pricing, UTC
+                  <span className="font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-muted-foreground">
+                    DeepSeek peak pricing, UTC
+                  </span>
                   {/* What the strip shows and which clock it reads: the peak
                       windows are quoted in UTC, and the marker is the reader's
                       own hour, so the two never disagree about which window is
@@ -286,27 +339,49 @@ export function MethodSection({
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <div className="mt-3 flex gap-0.5 rounded-lg border border-border px-1 pb-1 pt-4">
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <i
-                      key={h}
-                      suppressHydrationWarning
-                      className={
-                        "hour " +
-                        (isPeak(h) ? "hour-peak" : h < 7 ? "hour-night" : "") +
-                        (h === uh ? " hour-now" : "")
-                      }
+
+                {/* The day as one bare strip: tall segments, no box, and the
+                    two peak windows bracketed above at their true hours. */}
+                <div className="relative mt-5" data-clock>
+                  {PEAK.map(([a, b]) => (
+                    <span
+                      key={a}
+                      aria-hidden
+                      className="absolute -top-2 h-0.5 rounded-full bg-goat/70"
+                      style={{ left: (a / 24) * 100 + "%", width: ((b - a) / 24) * 100 + "%" }}
                     />
                   ))}
+                  <div className="flex gap-[3px]">
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <i
+                        key={h}
+                        suppressHydrationWarning
+                        className={
+                          "hour " +
+                          (isPeak(h) ? "hour-peak" : h < 7 ? "hour-night" : "") +
+                          (h === uh ? " hour-now" : "")
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-1.5 flex text-[10px] text-muted-foreground/70">
-                  {["00", "06", "12", "18", "23"].map((t, i) => (
-                    <span key={t} className={"flex-1 " + (i > 0 && i < 4 ? "text-center" : "")}>
+
+                {/* Boundary labels at true positions, 0 to 24. */}
+                <div className="relative mt-2 h-4 font-mono text-[10px] text-muted-foreground/70">
+                  {[
+                    ["00", 0, ""],
+                    ["06", 25, "-translate-x-1/2"],
+                    ["12", 50, "-translate-x-1/2"],
+                    ["18", 75, "-translate-x-1/2"],
+                    ["24", 100, "-translate-x-full"],
+                  ].map(([t, at, cls]) => (
+                    <span key={t} className={"absolute top-0 " + cls} style={{ left: at + "%" }}>
                       {t}
                     </span>
                   ))}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
+
+                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                     <i className="inline-block size-2.5 rounded-sm bg-goat" /> peak, weekdays
                   </span>
@@ -325,21 +400,24 @@ export function MethodSection({
                     off peak
                   </span>
                 </div>
-                {/* The reader's own hour, as a footer band: the marker dot, the
-                    UTC figure with its hover label, the local time, and the
-                    state that holds until the next window edge. */}
-                <p className="mt-4 mb-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border px-3.5 py-2.5 font-mono text-[12px]">
-                  <i className="inline-block size-2 rounded-full bg-bad" />
-                  You are here:{" "}
-                  {/* UTC now, the reader's own clock, and the peak state are the
-                      three figures the server cannot know. Each sits in its own
-                      flagged span so the structure is identical on both sides
-                      and only the text moves. */}
+
+                {/* The reader's own hour, as one borderless line: the marker
+                    dot, the UTC figure at size with its hover label, the local
+                    time, and the state that holds until the next window edge. */}
+                <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4">
+                  <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <i className="inline-block size-1.5 rounded-full bg-bad" />
+                    You are here
+                  </span>
+                  {/* UTC now, the reader's own clock, and the peak state are
+                      the three figures the server cannot know. Each sits in
+                      its own flagged span so the structure is identical on
+                      both sides and only the text moves. */}
                   <Tooltip>
                     <TooltipTrigger
                       render={
                         <b
-                          className="flex cursor-default items-center gap-1 font-semibold text-foreground"
+                          className="fig cursor-default text-[19px] font-bold tracking-[-0.02em] text-foreground"
                           suppressHydrationWarning
                         />
                       }
@@ -352,28 +430,34 @@ export function MethodSection({
                       UTC, so your hour marks the same strip.
                     </TooltipContent>
                   </Tooltip>
-                  <span suppressHydrationWarning>
-                    {", " +
-                      pad2(now.getHours() % 12 || 12) +
+                  <span
+                    className="text-[13px] font-light text-muted-foreground"
+                    suppressHydrationWarning
+                  >
+                    {pad2(now.getHours() % 12 || 12) +
                       ":" +
                       pad2(now.getMinutes()) +
                       " " +
                       (now.getHours() < 12 ? "AM" : "PM") +
                       " in " +
-                      zoneCity() +
-                      ". DeepSeek is "}
+                      zoneCity()}
                   </span>
-                  <b className="font-semibold text-foreground" suppressHydrationWarning>
-                    {isPeak(uh) ? "peak" : "off-peak"}
-                  </b>
-                  <span suppressHydrationWarning>
-                    {" until " +
-                      (nextBoundary(uh) > uh
-                        ? pad2(nextBoundary(uh)) + ":00 UTC"
-                        : "01:00 UTC tomorrow") +
-                      "."}
+                  <span
+                    className={
+                      "fig rounded-full border px-2.5 py-1 text-[11px] font-medium " +
+                      (isPeak(uh)
+                        ? "border-goat/40 bg-goat/10 text-goat"
+                        : "border-border text-muted-foreground")
+                    }
+                    suppressHydrationWarning
+                  >
+                    DeepSeek is <b className="font-semibold">{isPeak(uh) ? "peak" : "off-peak"}</b>{" "}
+                    until{" "}
+                    {nextBoundary(uh) > uh
+                      ? pad2(nextBoundary(uh)) + ":00 UTC"
+                      : "01:00 UTC tomorrow"}
                   </span>
-                </p>
+                </div>
               </div>
             </CardContent>
           </Card>

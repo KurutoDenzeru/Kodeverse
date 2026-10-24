@@ -43,7 +43,6 @@ const refreshSummary = (prev: PlanData, next: PlanData): string => {
 
 export function CompareApp({ initialData }: { initialData: PlanData }) {
   const [data, setData] = useState<PlanData>(initialData);
-  const [selected, setSelected] = useState<string>(() => initialData.plans[0]?.id ?? "");
   const [view, setView] = useState<ViewState>(initialView);
   const [refreshing, setRefreshing] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
@@ -176,10 +175,10 @@ export function CompareApp({ initialData }: { initialData: PlanData }) {
           turn main into a scroll container and snap every sticky rail. */}
       <main id="top" className="w-full max-w-full overflow-x-clip">
         <Hero />
-        <PlanCards data={data} selected={selected} onSelect={setSelected} />
+        <PlanCards data={data} />
         <LimitsSection data={data} />
-        <ModelsSection data={data} view={view} patch={patch} selected={selected} />
-        <MethodSection data={data} view={view} patch={patch} selected={selected} />
+        <ModelsSection data={data} view={view} patch={patch} />
+        <MethodSection data={data} view={view} patch={patch} />
       </main>
       <SiteFooter data={data} />
       <ChangelogDialog

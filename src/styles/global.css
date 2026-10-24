@@ -219,12 +219,12 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }
-  /* The 24 hour strip: three states as steps of ink over the card, never as
-     surface tints, because a tint on a surface is invisible in both themes. */
+  /* The 24 hour strip: three states as steps of ink, tall enough to read as
+     a timeline, opaque so they read on the card in both themes. */
   .hour {
     flex: 1;
-    height: 18px;
-    border-radius: 3px;
+    height: 40px;
+    border-radius: 5px;
     background: var(--h-off);
   }
   .hour-night {

@@ -50,7 +50,7 @@ function Figures({ items }: { items: { id: string; text: string }[] }) {
   return (
     <>
       {items.map((it) => (
-        <span key={it.id} className="fig block text-[12.5px] leading-relaxed tabular-nums">
+        <span key={it.id} className="fig block text-[12.5px] leading-snug tabular-nums">
           {it.text}
         </span>
       ))}
@@ -261,17 +261,17 @@ export function LimitsSection({ data }: { data: PlanData }) {
             {shown.map(({ m }) => (
               <li
                 key={m.key}
-                className="group px-5 py-3.5 transition-colors duration-300 hover:bg-accent/30"
+                className="group px-5 py-2 transition-colors duration-300 hover:bg-accent/30"
               >
                 {/* One row: the name, then the bars, then the two figure
                     columns. Below md the row becomes two lines, the bars
                     taking the full width under the name. */}
-                <div className="grid grid-cols-1 items-center gap-x-6 gap-y-2.5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto]">
+                <div className="grid grid-cols-1 items-center gap-x-6 gap-y-1.5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto]">
                   <span className="flex items-center gap-2.5 font-medium">
                     <ProviderLogo name={m.name} />
                     {m.name}
                   </span>
-                  <span className="flex flex-col gap-1">
+                  <span className="flex flex-col gap-0.5">
                     {ranking.map((p) => {
                       // One bar per plan. The width is the full scale for a
                       // free model and the log position of its request

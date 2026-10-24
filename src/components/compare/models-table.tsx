@@ -68,18 +68,8 @@ const COMPARE_SLOTS = 3;
 const RATE_FIELDS = ["input", "output", "cacheRead"] as const;
 
 /** The plans the table puts side by side: three, not every plan, because four
- *  columns of figures is past what the eye can hold. The selected plan is
- *  always in the window, so the header and the cards name the same providers. */
-const compareWindow = (data: PlanData, selected: string): PlanMeta[] => {
-  const list = data.plans;
-  if (list.length <= COMPARE_SLOTS) return list;
-  const at = Math.max(
-    0,
-    list.findIndex((p) => p.id === selected),
-  );
-  const start = Math.max(0, Math.min(at - 1, list.length - COMPARE_SLOTS));
-  return list.slice(start, start + COMPARE_SLOTS);
-};
+ *  columns of figures is past what the eye can hold. */
+const compareWindow = (data: PlanData): PlanMeta[] => data.plans.slice(0, COMPARE_SLOTS);
 
 const scopeOptions = (): [string, string][] => [
   // The scope picker offers whole sets, never a single plan: a model only one
@@ -155,19 +145,17 @@ export function ModelsSection({
   data,
   view,
   patch,
-  selected,
 }: {
   data: PlanData;
   view: ViewState;
   patch: (p: Partial<ViewState>) => void;
-  selected: string;
 }) {
   const onRequests = view.dim === "requests";
   const compete = onRequests ? WINDOW_FIELD[view.win] : "monthly";
   // The footer totals the comparable set, the same set the rows come from, so
   // the totals can never describe a table the reader is not looking at.
   const pool = useMemo(() => comparable(data, compete), [data, compete]);
-  const shown = compareWindow(data, selected);
+  const shown = compareWindow(data);
   // The tally counts the field the table is competing on, so the tie count in
   // the request view is a count of request ties and not of allowance ties.
   const t = tally(compete, data);

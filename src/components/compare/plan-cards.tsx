@@ -108,15 +108,7 @@ const windowFigure = (
   return top * (field === "five" ? caps.fiveHourPct : caps.weekPct);
 };
 
-export function PlanCards({
-  data,
-  selected,
-  onSelect,
-}: {
-  data: PlanData;
-  selected: string;
-  onSelect: (id: string) => void;
-}) {
+export function PlanCards({ data }: { data: PlanData }) {
   const root = useRef<HTMLElement>(null);
   const ranked = data.plans
     .filter((p) => p.ranks !== false)
@@ -180,7 +172,7 @@ export function PlanCards({
             <div
               key={field}
               data-bento
-              className="bg-card p-[clamp(20px,2.6vw,30px)] transition-colors duration-300 hover:bg-accent/40 md:col-span-2"
+              className="bg-card p-[clamp(20px,2.6vw,30px)] md:col-span-2"
             >
               <div className="flex items-baseline justify-between gap-3">
                 <h3 className="m-0 text-sm font-semibold tracking-tight">{label}</h3>
@@ -233,24 +225,11 @@ export function PlanCards({
           {data.plans.map((p) => {
             const rule = capRuleText(p, data);
             const figs = capFigures(p, data);
-            const on = p.id === selected;
             return (
-              <button
+              <div
                 key={p.id}
-                type="button"
                 data-bento
-                aria-pressed={on}
-                onClick={() => onSelect(p.id)}
-                className={
-                  "group rounded-none bg-card p-[clamp(20px,2.6vw,34px)] text-left transition-colors duration-300 md:col-span-3 " +
-                  (p.cls === "goat"
-                    ? on
-                      ? "bg-goat/[0.07] hover:bg-goat/[0.1]"
-                      : "hover:bg-accent/40"
-                    : on
-                      ? "bg-go/[0.07] hover:bg-go/[0.1]"
-                      : "hover:bg-accent/40")
-                }
+                className="rounded-none bg-card p-[clamp(20px,2.6vw,34px)] text-left md:col-span-3"
               >
                 <div className="flex items-start justify-between gap-4">
                   <h3 className="m-0 flex items-center gap-2.5 text-[clamp(20px,2.4vw,30px)] font-bold tracking-[-0.03em]">
@@ -297,7 +276,7 @@ export function PlanCards({
                     <p className="mb-2 font-mono text-[10px] uppercase leading-tight tracking-[0.1em] text-muted-foreground">
                       Best case month
                     </p>
-                    <p className="fig m-0 text-[clamp(28px,3.4vw,40px)] font-bold leading-none tracking-[-0.03em] transition-transform duration-500 ease-out group-hover:translate-x-1">
+                    <p className="fig m-0 text-[clamp(28px,3.4vw,40px)] font-bold leading-none tracking-[-0.03em]">
                       {money(peak(p.id, data))}
                     </p>
                   </div>
@@ -350,7 +329,7 @@ export function PlanCards({
                 <p className="mb-0 mt-7 max-w-[70ch] text-sm font-light text-muted-foreground">
                   {p.note}
                 </p>
-              </button>
+              </div>
             );
           })}
         </div>

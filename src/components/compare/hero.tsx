@@ -120,10 +120,10 @@ export function Hero() {
             <div data-hero-drift className="relative w-full max-w-[430px]">
               <div className="group overflow-hidden rounded-3xl border border-border shadow-2xl">
                 <img
-                  src="https://picsum.photos/seed/kodeverse-terminal/860/1060"
-                  alt=""
-                  width={860}
-                  height={1060}
+                  src="/hero.jpg"
+                  alt="Server racks in a data center: the machines a ten-dollar plan rents by the hour"
+                  width={1200}
+                  height={1500}
                   loading="eager"
                   className="aspect-[4/5] w-full object-cover grayscale contrast-125 opacity-90 transition-transform duration-700 ease-out group-hover:scale-105"
                 />
