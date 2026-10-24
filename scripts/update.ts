@@ -14,6 +14,7 @@ import type { PlanCaps, PlanData, PlanMeta } from "../src/lib/types.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "..", "src", "data", "plans.json");
+const VENDOR = join(HERE, "..", "vendor");
 
 // The Go page lives under the V2 console docs now. There is no .md file to
 // fetch: the same url answers markdown when the request asks for it, so the
@@ -95,6 +96,12 @@ async function main() {
       note: "Flat $14 per five hours and $35 per week, held down by the model credit.",
     },
   ];
+
+  // The fixtures travel with the data: verify.ts parses exactly these files,
+  // so a refresh that updated the figures but left a stale snapshot behind
+  // would fail its own gate on a drift it did not cause.
+  writeFileSync(join(VENDOR, "vendor-opencode.md"), ocMd.trimEnd() + "\n");
+  writeFileSync(join(VENDOR, "vendor-commandcode.html"), ccHtml.trimEnd() + "\n");
 
   const payload: PlanData = {
     fetchedAt: new Date().toISOString(),
