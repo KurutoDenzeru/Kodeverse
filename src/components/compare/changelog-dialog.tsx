@@ -152,13 +152,14 @@ export function ChangelogDialog({
             </EmptyHeader>
           </Empty>
         ) : (
-          /* The log grouped by day: one date band per day, entries stacked
-              under it. A list of dated changes reads on every width; the
-              five-column table it replaces did not survive a phone. */
+          // The log grouped by day: one date band per day, entries stacked
+          // under it. A list of dated changes reads on every width; the
+          // five-column table it replaces did not survive a phone. The
+          // groups key on the UTC date, the same basis the labels use.
           <div className="overflow-hidden">
             {Array.from(
               slice.reduce((map, e) => {
-                const day = new Date(e.when).toDateString();
+                const day = new Date(e.when).toISOString().slice(0, 10);
                 const group = map.get(day);
                 if (group) group.push(e);
                 else map.set(day, [e]);
