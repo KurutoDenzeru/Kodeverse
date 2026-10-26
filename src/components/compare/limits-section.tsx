@@ -45,16 +45,34 @@ function Bar({ cls, width }: { cls: "go" | "goat"; width: number }) {
 }
 
 /** A stacked figure column: one line per plan, in the plan's order, so the two
- *  numbers on a row always belong to the same plan as the two bars. */
-function Figures({ items }: { items: { id: string; text: string }[] }) {
+ *  numbers on a row always belong to the same plan as the two bars — and wear
+ *  the plan's colour, so a stack is readable without the header row. On
+ *  mobile the column carries its own micro label, because the shared header
+ *  row is wide-screen only. */
+function Figures({
+  items,
+  label,
+}: {
+  items: { id: string; text: string; cls: string }[];
+  label: string;
+}) {
   return (
-    <>
+    <span className="block">
+      <span className="mb-0.5 block font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60 md:hidden">
+        {label}
+      </span>
       {items.map((it) => (
-        <span key={it.id} className="fig block text-[12.5px] leading-snug tabular-nums">
+        <span
+          key={it.id}
+          className={
+            "fig block text-[12.5px] leading-snug tabular-nums " +
+            (it.cls === "goat" ? "text-goat" : it.cls === "go" ? "text-go" : "")
+          }
+        >
           {it.text}
         </span>
       ))}
-    </>
+    </span>
   );
 }
 
@@ -261,13 +279,13 @@ export function LimitsSection({ data }: { data: PlanData }) {
             {shown.map(({ m }) => (
               <li
                 key={m.key}
-                className="group px-5 py-2 transition-colors duration-300 hover:bg-accent/30"
+                className="group px-4 py-2 transition-colors duration-300 hover:bg-accent/30 md:px-5"
               >
-                {/* One row: the name, then the bars, then the two figure
-                    columns. Below md the row becomes two lines, the bars
-                    taking the full width under the name. */}
-                <div className="grid grid-cols-1 items-center gap-x-6 gap-y-1.5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto]">
-                  <span className="flex items-center gap-2.5 font-medium">
+                {/* One row: the name spans the top, then the bars share one
+                    line with both figure stacks — the two numbers sit at the
+                    row's tail on mobile too, never under the bars. */}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1.5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2.1fr)_auto_auto] md:gap-x-6">
+                  <span className="col-span-3 flex items-center gap-2.5 font-medium md:col-span-1">
                     <ProviderLogo name={m.name} />
                     {m.name}
                   </span>
@@ -292,10 +310,12 @@ export function LimitsSection({ data }: { data: PlanData }) {
                   </span>
                   <span className="text-right">
                     <Figures
+                      label="req / 5h"
                       items={ranking.map((p) => {
                         const v = reqOf(m, p.id, "five");
                         return {
                           id: p.id,
+                          cls: p.cls,
                           text: v == null ? "-" : v === -1 ? "\u221e" : reqText(v),
                         };
                       })}
@@ -303,9 +323,10 @@ export function LimitsSection({ data }: { data: PlanData }) {
                   </span>
                   <span className="text-right">
                     <Figures
+                      label="monthly"
                       items={ranking.map((p) => {
                         const v = m.plans[p.id]!.monthly;
-                        return { id: p.id, text: v === -1 ? "\u221e" : money(v) };
+                        return { id: p.id, cls: p.cls, text: v === -1 ? "\u221e" : money(v) };
                       })}
                     />
                   </span>

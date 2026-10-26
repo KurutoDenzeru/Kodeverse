@@ -3,8 +3,8 @@
 // browser keeps thirty days of them. Nothing leaves the machine.
 //
 // A log is history, not part of the page's argument, so it holds no section
-// of its own. Inside the dialog it stays a table, because a list of dated
-// changes is exactly what a table is for.
+// of its own. Inside the dialog the entries group under date bands, because
+// a day is how a reader asks "what moved since I last looked".
 
 import { Clock } from "lucide-react";
 import { useMemo } from "react";
@@ -33,14 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { LOG_META, buildLog, snapshotOf } from "@/lib/changelog";
 import { whenLabel } from "@/lib/format";
 import type { PlanData } from "@/lib/types";
@@ -91,10 +83,10 @@ export function ChangelogDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* The log is five columns wide, so the dialog opens wider than the
-          component's default and scrolls its own table body. */}
-      <DialogContent className="max-h-[85dvh] gap-0 overflow-y-auto sm:max-w-3xl">
-        <DialogHeader className="px-5 pt-4">
+      {/* The dialog scrolls its own body and spans the phone: the grouped
+          list needs no minimum width to stay readable. */}
+      <DialogContent className="max-h-[85dvh] gap-0 overflow-y-auto sm:max-w-2xl">
+        <DialogHeader className="px-4 pt-4 sm:px-5">
           <DialogTitle>What changed</DialogTitle>
           <DialogDescription>
             Every refresh adds a dated entry. This browser keeps {DAYS} days of them, and none of it
@@ -102,7 +94,7 @@ export function ChangelogDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2.5 border-y border-border px-5 py-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2.5 border-y border-border px-4 py-3 sm:px-5">
           <span className="fig text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
             Show
           </span>
@@ -111,7 +103,10 @@ export function ChangelogDialog({
             onValueChange={(v) => patch({ logKind: String(v), logPage: 1 })}
             items={Object.fromEntries(kinds)}
           >
-            <SelectTrigger aria-label="Filter changes by kind" className="min-w-[180px]">
+            <SelectTrigger
+              aria-label="Filter changes by kind"
+              className="w-full min-w-[180px] sm:w-[210px]"
+            >
               <SelectValue className="text-sm first-letter:uppercase" />
             </SelectTrigger>
             <SelectContent>
@@ -157,59 +152,76 @@ export function ChangelogDialog({
             </EmptyHeader>
           </Empty>
         ) : (
-          <Table contain={false}>
-            <TableHeader>
-              <TableRow className="bg-muted hover:bg-muted">
-                <TableHead scope="col">Kind</TableHead>
-                <TableHead scope="col">Model</TableHead>
-                <TableHead scope="col">Plan</TableHead>
-                <TableHead scope="col">Change</TableHead>
-                <TableHead scope="col">When</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {slice.map((e) => {
-                const meta = LOG_META[e.kind] ?? LOG_META.price;
-                const plan = data.plans.find((p) => p.label === e.plan);
-                // The key is the entry itself: kind, model, plan, field and
-                // moment together name one row, and no two rows share all five.
-                const key = [e.kind, e.model, e.plan, e.label ?? "", e.when].join("|");
-                return (
-                  <TableRow key={key}>
-                    <TableCell>
-                      <Badge variant={meta.badge === "badge-secondary" ? "secondary" : "outline"}>
-                        {meta.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium whitespace-normal">{e.model}</TableCell>
-                    <TableCell>
-                      {plan ? (
-                        <span className="flex items-center gap-2">
-                          <BrandMark id={plan.id as "opencode" | "commandcode"} small />
-                          {plan.short}
-                        </span>
-                      ) : (
-                        e.plan
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-normal">
-                      {e.label && <span className="text-muted-foreground">{e.label} </span>}
-                      <b className="font-semibold">{e.text}</b>
-                    </TableCell>
-                    <TableCell className="fig text-xs whitespace-nowrap text-muted-foreground">
-                      <time dateTime={e.when} title={new Date(e.when).toUTCString()}>
-                        {whenLabel(e.when)}
-                      </time>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          /* The log grouped by day: one date band per day, entries stacked
+              under it. A list of dated changes reads on every width; the
+              five-column table it replaces did not survive a phone. */
+          <div className="overflow-hidden">
+            {Array.from(
+              slice.reduce((map, e) => {
+                const day = new Date(e.when).toDateString();
+                const group = map.get(day);
+                if (group) group.push(e);
+                else map.set(day, [e]);
+                return map;
+              }, new Map<string, typeof slice>()),
+              ([day, entries]) => (
+                <section key={day}>
+                  <h3 className="sticky top-0 z-10 m-0 flex items-center justify-between border-y border-border bg-muted/80 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground backdrop-blur-sm sm:px-5">
+                    <span>{whenLabel(entries[0].when).replace(/,\s*\d{2}:\d{2}\s*UTC$/, "")}</span>
+                    <span className="fig">
+                      {entries.length} {entries.length === 1 ? "change" : "changes"}
+                    </span>
+                  </h3>
+                  <ul className="m-0 list-none p-0">
+                    {entries.map((e) => {
+                      const meta = LOG_META[e.kind] ?? LOG_META.price;
+                      const plan = data.plans.find((p) => p.label === e.plan);
+                      // The key is the entry itself: kind, model, plan, field
+                      // and moment together name one row, and no two rows
+                      // share all five.
+                      const key = [e.kind, e.model, e.plan, e.label ?? "", e.when].join("|");
+                      return (
+                        <li
+                          key={key}
+                          className="border-b border-border/60 px-4 py-3 last:border-b-0 sm:px-5"
+                        >
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                            <Badge
+                              variant={meta.badge === "badge-secondary" ? "secondary" : "outline"}
+                            >
+                              {meta.label}
+                            </Badge>
+                            {plan && (
+                              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <BrandMark id={plan.id as "opencode" | "commandcode"} small />
+                                {plan.short}
+                              </span>
+                            )}
+                            <time
+                              className="fig ml-auto text-[11px] text-muted-foreground"
+                              dateTime={e.when}
+                              title={new Date(e.when).toUTCString()}
+                            >
+                              {whenLabel(e.when)}
+                            </time>
+                          </div>
+                          <p className="mb-0 text-[14px] font-medium">{e.model}</p>
+                          <p className="mb-0 mt-0.5 text-[13px] font-normal text-muted-foreground">
+                            {e.label && <span>{e.label} </span>}
+                            <b className="font-semibold text-foreground">{e.text}</b>
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ),
+            )}
+          </div>
         )}
 
         {shown.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-3 border-t border-border px-5 py-3">
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-3 border-t border-border px-4 py-3 sm:px-5">
             <span className="fig text-xs text-muted-foreground" aria-live="polite">
               {pages <= 1
                 ? shown.length === 1

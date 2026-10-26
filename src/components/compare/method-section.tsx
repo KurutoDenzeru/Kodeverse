@@ -141,15 +141,15 @@ export function MethodSection({
       mm.add("(prefers-reduced-motion: no-preference)", () => {
         gsap.fromTo(
           "[data-word]",
-          { opacity: 0.12 },
+          { opacity: 0.35 },
           {
             opacity: 1,
             ease: "none",
             stagger: 0.06,
             scrollTrigger: {
               trigger: "[data-scrub]",
-              start: "top 85%",
-              end: "top 42%",
+              start: "top 95%",
+              end: "top 45%",
               scrub: true,
             },
           },
@@ -194,9 +194,9 @@ export function MethodSection({
               ))}
             </p>
           </div>
-          {/* The picker sits at the far right, its edge on the right card's
-              edge, and every option carries its model's own mark. */}
-          <div className="flex items-center gap-2.5 justify-self-end pb-1">
+          {/* The picker sits at the far right on a wide screen and centered on
+              a phone, and every option carries its model's own mark. */}
+          <div className="flex items-center gap-2.5 justify-self-center pb-1 lg:justify-self-end">
             <Label
               htmlFor="method-model"
               className="fig text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground"
@@ -238,12 +238,14 @@ export function MethodSection({
               the model owns the middle, and every window reads across in one
               line with the gap named under it. */}
           <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-6 gap-y-2 px-6 pt-[22px] pb-5">
-              <div className="flex items-center gap-2.5 justify-self-start">
+            {/* On a wide screen each plan owns its corner; on mobile the names
+                step aside and the marks ride beside their figures instead. */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4 gap-y-2 px-4 pt-5 pb-4 md:px-6 md:pb-5">
+              <div className="hidden items-center gap-2.5 justify-self-start md:flex">
                 <BrandMark id="opencode" small />
                 <span className="text-sm font-semibold text-go">OpenCode Go</span>
               </div>
-              <div className="flex flex-col items-center gap-1.5 text-center">
+              <div className="col-start-2 flex flex-col items-center gap-1.5 text-center">
                 {/* The model's own maker, from the same sprite the table uses:
                     the mark follows the picker, whatever it names. */}
                 <ProviderLogo name={pick.name} size={30} />
@@ -251,7 +253,7 @@ export function MethodSection({
                   {pick.name}
                 </h3>
               </div>
-              <div className="flex items-center gap-2.5 justify-self-end">
+              <div className="hidden items-center gap-2.5 justify-self-end md:flex">
                 <span className="text-sm font-semibold text-goat">Command Code GOAT</span>
                 <BrandMark id="commandcode" small />
               </div>
@@ -265,14 +267,17 @@ export function MethodSection({
                 return (
                   <div
                     key={k}
-                    className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-6 gap-y-1 bg-card px-6"
+                    className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-3 gap-y-1 bg-card px-4 py-3.5 md:px-6 md:py-0"
                   >
                     <p
                       className={
-                        "fig m-0 justify-self-start text-[clamp(21px,2.2vw,28px)] font-bold leading-none tracking-[-0.03em] " +
+                        "fig m-0 flex items-center gap-2 justify-self-start text-[clamp(19px,2.2vw,28px)] font-bold leading-none tracking-[-0.03em] " +
                         versusTone(gap, "opencode")
                       }
                     >
+                      <span aria-hidden className="md:hidden">
+                        <BrandMark id="opencode" small />
+                      </span>
                       {left == null ? (
                         <span className="text-[0.62em] font-medium text-muted-foreground/60">
                           not published
@@ -289,7 +294,7 @@ export function MethodSection({
                     </div>
                     <p
                       className={
-                        "fig m-0 justify-self-end text-[clamp(21px,2.2vw,28px)] font-bold leading-none tracking-[-0.03em] " +
+                        "fig m-0 flex items-center gap-2 justify-self-end text-[clamp(19px,2.2vw,28px)] font-bold leading-none tracking-[-0.03em] " +
                         versusTone(gap, "commandcode")
                       }
                     >
@@ -300,6 +305,9 @@ export function MethodSection({
                       ) : (
                         money(right)
                       )}
+                      <span aria-hidden className="md:hidden">
+                        <BrandMark id="commandcode" small />
+                      </span>
                     </p>
                   </div>
                 );
