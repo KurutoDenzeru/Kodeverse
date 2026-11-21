@@ -57,7 +57,6 @@ document as a dated reading of them.
 flowchart LR
   OC["opencode.ai Go page<br/>(markdown)"] --> PARSE["parsers.ts<br/>one row per model"]
   CC["commandcode.ai GOAT page<br/>(html)"] --> PARSE
-  CRON["GitHub Action<br/>every 6 hours"] -->|"bun scripts/update.ts"| PARSE
   PARSE --> MERGE["merge.ts<br/>keys normalised, caps applied"]
   MERGE --> JSON[("src/data/plans.json<br/>the baked figures")]
   JSON --> BUILD["astro build"]
@@ -74,7 +73,7 @@ flowchart LR
   UNIT["bun run test<br/>62 unit tests over the rules"] --> RULES["compare, parsers,<br/>merge, changelog, format"]
 ```
 
-## Why a static page, a refresh button, and a scheduled read
+## Why a static page and a refresh button
 
 - Nothing to read needs a server. The page is a static build with the figures
   baked in at build time.
@@ -85,10 +84,6 @@ flowchart LR
   Code is read directly because it sends `Access-Control-Allow-Origin`, and
   opencode.ai, which sends none, is read through a reader service that echoes
   the origin back.
-- The scheduled read needs no relay at all. `.github/workflows/refresh.yml`
-  runs `bun scripts/update.ts` every six hours, writes the figures, and commits
-  when anything moved. A deployment that rebuilds on push is then never more
-  than six hours stale, and the footer states the exact read date regardless.
 - A refresh fails closed. A reply that comes back missing a plan, missing most
   of the catalogue, or with too few comparable models is refused, and the
   figures on screen stay the ones the last build read.
@@ -140,8 +135,6 @@ Three layers, from the cheapest to the closest to the reader.
 - `bun run smoke` drives the built page in a real browser against the local
   server. It exercises the filter, both comparison dimensions, paging, the
   theme, and a live refresh, and it fails on any uncaught page error.
-- `.github/workflows/verify.yml` runs lint, format, types, tests, build and the
-  gate on every push.
 - Numbers are never invented. Every figure on the page comes from the vendor
   pages, and the read date sits in the footer.
 
@@ -162,9 +155,6 @@ scripts/
   verify.ts           the gate: data, parsers, merge, changelog, serve contract
   browser-smoke.mjs   drive the built page in a real browser
 vendor/               the two vendor pages, kept as fixtures for verify.ts
-.github/workflows/
-  refresh.yml         scheduled read: every six hours, commit when a figure moves
-  verify.yml          lint, format, types, build and the gate on every push
 ```
 
 ## Commands
